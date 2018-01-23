@@ -23,9 +23,9 @@ class Calibrator:
         quaternion = transform.quaternion
         translation = transform.translation
                 
-        self.br.sendTransform(translation, quaternion, rospy.Time.now(), transform.from_frame, transform.to_frame)
+        self.br.sendTransform(translation, quaternion, rospy.Time.now(), transform.to_frame, transform.from_frame)
     
-    def get_transfom(self, source_frame, target_frame):
+    def get_transfom(self, target_frame, source_frame):
         """ Finds the 4x4 transformation matrix from source frame to target frame
         Params
         ---
@@ -37,18 +37,14 @@ class Calibrator:
         """
         try:
             #Providing rospy.Time(0) will just get us the latest available transform
-            (trans, rot) = self.listener.lookupTransform(source_frame, target_frame, rospy.Time(0))
+            (trans, rot) = self.listener.lookupTransform(target_frame, source_frame, rospy.Time(0))
             
             h_mat = self.listener.fromTranslationRotation(trans,rot)
 
-            return RigidTransform(rotation=h_mat[0:3,0:3], translation=trans, from_frame=source_frame, to_frame=target_frame)
-            #print(trans, rot)
-            # rot_matrix = tf.transformations.quaternion_matrix(rot)
-            # trans_matrix = tf.transformations.translation_matrix(trans)
-            # h_mat = np.dot(trans_matrix,rot_matrix)
-            #return h_mat
+            return RigidTransform(rotation=h_mat[0:3,0:3], translation=trans, from_frame=target_frame, to_frame=source_frame)
+
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            return RigidTransform(rotation=np.eye(3), translation = np.array([0,0,0]), from_frame=source_frame, to_frame=target_frame)
+            return RigidTransform(rotation=np.eye(3), translation = np.array([0,0,0]), from_frame=target_frame, to_frame=source_frame)
 
 if __name__ == '__main__':
     rospy.init_node('camera_calibration')
@@ -62,12 +58,10 @@ if __name__ == '__main__':
         T_kinect_ar = calibrator.get_transfom("/ar_marker_{}".format(markernumber), "/kinect2_rgb_optical_frame")
 
         T_eef_world = calibrator.get_transfom("/world", "/j2s7s300_end_effector")
-        T_ar_eef = RigidTransform(rotation=np.eye(3) , translation=[0,0,0.045], from_frame="/j2s7s300_end_effector", to_frame="/ar_marker_{}".format(markernumber))
+        T_ar_eef = RigidTransform(rotation=np.eye(3) , translation=[0,0,0], from_frame="/j2s7s300_end_effector", to_frame="/ar_marker_{}".format(markernumber))
 
-        #T_ar_kinect = np.linalg.inv(T_kinect_ar) #from ar tag to kinect
         T_world_kinect = T_kinect_ar*T_ar_eef*T_eef_world
         print("resulting",T_world_kinect.from_frame, T_world_kinect.to_frame)
-        #T_world_kinect = T_ar_kinect*
 
         print(T_world_kinect)
         calibrator.broadcast_transform(T_world_kinect)
