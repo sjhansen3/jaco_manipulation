@@ -28,6 +28,10 @@ class RobotPlanner:
         self.solved_plan = None
 
     def add_scene_items(self):
+        """
+        Add obstacles into the scene for planning with moveit
+        """
+        #TODO add scene item for tripod and bookshelf
         self.scene.remove_world_object("ground")
         self.scene.remove_world_object("table")
         rospy.sleep(1)
@@ -42,17 +46,21 @@ class RobotPlanner:
         p.pose.orientation.w = 1
         print("add box")
         
+        #add the desk
         self.scene.add_mesh("table",p,"Desk.stl",size = (0.01, 0.01, 0.01))
 
         p.pose.position.y = 0
         p.pose.position.x = 0
         #TODO add ros param to turn off ground
-        self.scene.add_box("ground", p, (3, 3, 0.02))
+        self.scene.add_box("ground", p, (3, 3, 0.02)) #add a "ground plane"
+
 
         p.pose.position.z = 0
-        self.scene.add_box("base",p,(0.15,0.15,0.15))
+        self.scene.add_box("base",p,(0.15,0.15,0.15)) #add a base for safety
 
     def plan(self, position):
+        """ Plan to a position
+        """
         self.group.clear_pose_targets()
 
         pose_target = geometry_msgs.msg.Pose()
@@ -68,9 +76,12 @@ class RobotPlanner:
         rospy.sleep(1)
         self.solved_plan = self.group.plan() #automatically displays trajectory
         print("displaying")
-        
+    
+    #TODO add waypoint planning for pregrasp -> grasp
 
     def execute(self):
+        """ Execute a planned path
+        """
         if self.solved_plan is None:
             rospy.logwarn("Plan is None, planning might not have been completed or failed")
             return
@@ -163,23 +174,24 @@ if __name__ == '__main__':
     rospy.sleep(2)
     robot_planner = RobotPlanner()
     grip_controller = GripController()
+
+    #sample code for pick and place like application
     while True:
         #pre grip location
         robot_planner.plan([0.3,0.3,0.4])
         grip_controller.grip("percent",[0,0,0])
-        raw_input("plan to start pose commplete, anykey to execute")
+        raw_input("plan to start pose commplete, anykey and enter to execute")
         robot_planner.execute()
 
         #grip location
         robot_planner.plan([0.7,0.3,0.4])
-        raw_input("plan to grip pose commplete, anykey to execute")
+        raw_input("plan to grip pose commplete, anykey and enter to execute")
         robot_planner.execute()
         
         #grip object
         raw_input("grip object? anykey to execute")
         grip_controller.grip("percent",[75,75,75])
         
-
         #pull back
         robot_planner.plan([0.3,0.3,0.3])
         robot_planner.execute()

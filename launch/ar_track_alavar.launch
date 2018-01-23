@@ -4,10 +4,14 @@
 	<arg name="max_new_marker_error" default="0.08" />
 	<arg name="max_track_error" default="0.2" />
 
+	<!--Change this topic to use depth data -->
+	
 	<arg name="cam_image_topic" default="/kinect2/hd/image_color" />
+
 	<arg name="cam_info_topic" default="/kinect2/hd/camera_info" />
 	<arg name="output_frame" default="/kinect2_rgb_optical_frame" />
 
+	<!-- launch alvar AR tag tracker, change to individualMarkers if you want to take advantage of kinect data-->
 	<node name="ar_track_alvar" pkg="ar_track_alvar" type="individualMarkersNoKinect" respawn="false" output="screen">
 		<param name="marker_size"           type="double" value="$(arg marker_size)" />
 		<param name="max_new_marker_error"  type="double" value="$(arg max_new_marker_error)" />
@@ -18,7 +22,7 @@
 		<remap from="camera_info"   to="$(arg cam_info_topic)" />
 	</node>
 
-	<!-- Launch kinect bridge-->
+	<!-- Launch kinect bridge -->
 	<node name="kinect2_bridge" pkg="kinect2_bridge" type="kinect2_bridge">
 		<param name="depth_method" value="opengl"/>
 		<param name="reg_method" value="cpu"/>
