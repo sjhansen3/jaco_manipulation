@@ -34,8 +34,6 @@
   <!-- launch rviz-->
   <arg name="command_args" default="-d $(find jaco_manipulation)/launch/manipulation_config.rviz"/>
   <node name="$(anon rviz)" pkg="rviz" type="rviz" respawn="false"
-	args="$(arg command_args)" 
     output="screen">
-    <rosparam command="load" file="$(find j2s7s300_moveit_config)/config/kinematics.yaml"/>
   </node>
 </launch>
