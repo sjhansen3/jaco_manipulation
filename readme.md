@@ -36,8 +36,17 @@ Which loads the following:
 `roslaunch jaco_manipulation ar_track_alavar.launch`
 1. **launch AR tracker** indigo branch of ar_track_alvar https://github.com/ros-perception/ar_track_alvar/tree/indigo-devel
 2. **launch kinect bridge** iai_kinect2 from https://github.com/code-iai/iai_kinect2/tree/master/kinect2_bridge
+3. **calibrate the kinect** using calibrate_camera.py
+* this requries ar_tracker_6 be placed right belwo the robot
 
 #TODO Point clouds are only published when the launch file is used. Run roslaunch kinect2_bridge kinect2_bridge.launch
+
+for debugging kinect connection issues:
+While bridge is running, run the following to view the camera
+`rosrun kinect2_viewer kinect2_viewer hd image `
+
+A ros independent way to check kinect drivers is by running
+`./libfreenect2/build/bin/Protonect` from the home directory
 
 
 ## Run pick and place demo
