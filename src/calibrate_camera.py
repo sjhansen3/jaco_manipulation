@@ -3,79 +3,74 @@
 import tf
 import rospy
 import numpy as np
-from autolab_core import RigidTransform
-import numpy as np
-
-import std_msgs.msg
 
 class Calibrator:
-    def __init__(self, markernumber=6):
+    def __init__(self, trans, markernumber=6):
+        """ Calibrates the position of a camera using an AR tracker
+        The AR tracker is placed in a fixed translation from the /world frame of the robot
+
+        Params
+        ---
+        markernumber: The number of the ar_marker
+        trans: The translation from the world frame to the AR tracker frame
+        """
         self.br = tf.TransformBroadcaster()
         self.markernumber = markernumber
         self.listener = tf.TransformListener()
+        self.trans_world2ar = trans
+        self.calibration_counter = 0
 
-    
-    def broadcast_transform(self, transform):
-        """Define the trasformation between 
-        the end effector and the QR tag on the end effector
+        #default T_kinect_world
+        self.trans = (0,0,0)
+        self.orientation = (0,0,0,1)
+
+    def send_static_transform(self):
+        """Broadcast the transformation between /world and the kinect
         """
 
-        quaternion = transform.quaternion
-        translation = transform.translation
-                
-        self.br.sendTransform(translation, quaternion, rospy.Time.now(), "/world", "/kinect2_rgb_optical_frame" )
+        self.br.sendTransform(self.trans, self.orientation, rospy.Time.now(), "/kinect2_rgb_optical_frame", "/world" )
     
-    def get_transfom(self, target_frame, source_frame):
-        """ Finds the 4x4 transformation matrix from source frame to target frame
-        Params
-        ---
-        target_frame: a string label of the target frame
-        source_frame: a string label of the source frame
-        Returns
-        ---
-        4x4 matrix transform
+    def get_static_transform(self):
+        """ Finds the transformation from kinect to the ar tag
+        After :calibration counter: successful tf reads it stores the most recent value
+
+        The AR tracker is assumed to have no rotation compared to the world frame
+        The translation is specified from the world to the AR marker
         """
+
         try:
             #Providing rospy.Time(0) will just get us the latest available transform
-            (trans, rot) = self.listener.lookupTransform(target_frame, source_frame, rospy.Time(0))
-            
-            h_mat = self.listener.fromTranslationRotation(trans,rot)
+            if self.calibration_counter<20:
+                ar_frame = "/ar_marker_{}".format(markernumber)
+                kinect_frame = "/kinect2_rgb_optical_frame"
 
-            return RigidTransform(rotation=h_mat[0:3,0:3], translation=trans, from_frame=source_frame, to_frame=target_frame)
+                (trans, rot) = self.listener.lookupTransform(ar_frame, kinect_frame, rospy.Time(0))
+
+                trans = np.asarray(trans)
+                trans += self.trans_world2ar #adjust T_ar_kinect to match T_world_kinect
+
+                self.calibration_counter+=1
+                self.trans = trans
+                self.orientation = rot
+                if self.calibration_counter == 19:
+                    rospy.loginfo("Calibration complete")
+            return (self.trans, self.orientation)
 
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            return RigidTransform(rotation=np.eye(3), translation = np.array([0,0,0]), from_frame=source_frame, to_frame=target_frame)
+
+            rospy.loginfo("Waiting for AR tracker tf frame for calibration")
 
 if __name__ == '__main__':
-    rospy.init_node('camera_calibration')
+    rospy.init_node('calibrate_camera')
     markernumber = 6
-    calibrator = Calibrator(markernumber)
+    translation = [0, -0.062, -0.035] #trnslation of QR tracker in robot reference frame
+    calibrator = Calibrator(translation, markernumber)
 
     rate = rospy.Rate(10.0)
     while not rospy.is_shutdown():
-        print("***Kinect to AR6")
+        calibrator.get_static_transform()
+        calibrator.send_static_transform()
 
-        try:
-            trans, rot = calibrator.listener.lookupTransform("/ar_marker_{}".format(markernumber), "/kinect2_rgb_optical_frame", rospy.Time(0))
-            print(trans,"before")
-            trans = np.asarray(trans)
-            trans += [0, -0.062, -0.035]
-            print(trans, "after")
-            calibrator.br.sendTransform(trans, rot, rospy.Time.now(), "/kinect2_rgb_optical_frame", "/world")
-        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            print("error ...")
-
-        # T_ar_kinect = calibrator.get_transfom("/ar_marker_{}".format(markernumber), "/kinect2_rgb_optical_frame")
-        #T_world_ar = RigidTransform(rotation=np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]]), translation=[0, 0.062, 0.035], from_frame="/ar_marker_{}".format(markernumber), to_frame="/world")
-
-        #T_world_kinect = T_world_ar*T_ar_kinect
-        #print("resulting", T_world_kinect.from_frame, T_world_kinect.to_frame)
-
-        # print(T_ar_kinect)
-        # calibrator.broadcast_transform(T_ar_kinect.inverse())
         rate.sleep()
 
-
-    #rospy.Timer(rospy.Duration(1./30), calibrator.fix_eef_to_fudcuial)
-    print("fiducial")
     rospy.spin()
