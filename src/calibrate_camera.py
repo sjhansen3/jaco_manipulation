@@ -23,7 +23,7 @@ class Calibrator:
         quaternion = transform.quaternion
         translation = transform.translation
                 
-        self.br.sendTransform(translation, quaternion, rospy.Time.now(), transform.from_frame, transform.to_frame)
+        self.br.sendTransform(translation, quaternion, rospy.Time.now(), "/world", "/kinect2_rgb_optical_frame" )
     
     def get_transfom(self, target_frame, source_frame):
         """ Finds the 4x4 transformation matrix from source frame to target frame
@@ -54,17 +54,25 @@ if __name__ == '__main__':
     rate = rospy.Rate(10.0)
     while not rospy.is_shutdown():
         print("***Kinect to AR6")
-        
-        T_ar_kinect = calibrator.get_transfom("/ar_marker_{}".format(markernumber), "/kinect2_rgb_optical_frame")
 
-        T_world_eef = calibrator.get_transfom("/world", "/j2s7s300_end_effector")
-        T_eef_ar = RigidTransform(rotation=np.eye(3) , translation=[0,0,0], from_frame="/ar_marker_{}".format(markernumber), to_frame="/j2s7s300_end_effector")
+        try:
+            trans, rot = calibrator.listener.lookupTransform("/ar_marker_{}".format(markernumber), "/kinect2_rgb_optical_frame", rospy.Time(0))
+            print(trans,"before")
+            trans = np.asarray(trans)
+            trans += [0, -0.062, -0.035]
+            print(trans, "after")
+            calibrator.br.sendTransform(trans, rot, rospy.Time.now(), "/kinect2_rgb_optical_frame", "/world")
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            print("error ...")
 
-        T_world_kinect = T_world_eef*T_eef_ar*T_ar_kinect
-        print("resulting",T_world_kinect.from_frame, T_world_kinect.to_frame)
+        # T_ar_kinect = calibrator.get_transfom("/ar_marker_{}".format(markernumber), "/kinect2_rgb_optical_frame")
+        #T_world_ar = RigidTransform(rotation=np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]]), translation=[0, 0.062, 0.035], from_frame="/ar_marker_{}".format(markernumber), to_frame="/world")
 
-        print(T_world_kinect)
-        calibrator.broadcast_transform(T_world_kinect)
+        #T_world_kinect = T_world_ar*T_ar_kinect
+        #print("resulting", T_world_kinect.from_frame, T_world_kinect.to_frame)
+
+        # print(T_ar_kinect)
+        # calibrator.broadcast_transform(T_ar_kinect.inverse())
         rate.sleep()
 
 
