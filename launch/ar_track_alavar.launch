@@ -28,6 +28,8 @@
 		<param name="reg_method" value="cpu"/>
 	</node>
 
-	<!-- set the rigid transfor using tf -->
+	<!-- run calibration using ar_marker_6 for the kinect and publish static transform -->
+	<node name="calibrate_camera" pkg="jaco_manipulation" type="calibrate_camera.py">
+	</node>
 
 </launch>
