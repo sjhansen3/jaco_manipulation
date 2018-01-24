@@ -23,7 +23,7 @@ class Calibrator:
         quaternion = transform.quaternion
         translation = transform.translation
                 
-        self.br.sendTransform(translation, quaternion, rospy.Time.now(), transform.to_frame, transform.from_frame)
+        self.br.sendTransform(translation, quaternion, rospy.Time.now(), transform.from_frame, transform.to_frame)
     
     def get_transfom(self, target_frame, source_frame):
         """ Finds the 4x4 transformation matrix from source frame to target frame
@@ -41,10 +41,10 @@ class Calibrator:
             
             h_mat = self.listener.fromTranslationRotation(trans,rot)
 
-            return RigidTransform(rotation=h_mat[0:3,0:3], translation=trans, from_frame=target_frame, to_frame=source_frame)
+            return RigidTransform(rotation=h_mat[0:3,0:3], translation=trans, from_frame=source_frame, to_frame=target_frame)
 
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            return RigidTransform(rotation=np.eye(3), translation = np.array([0,0,0]), from_frame=target_frame, to_frame=source_frame)
+            return RigidTransform(rotation=np.eye(3), translation = np.array([0,0,0]), from_frame=source_frame, to_frame=target_frame)
 
 if __name__ == '__main__':
     rospy.init_node('camera_calibration')
@@ -55,12 +55,12 @@ if __name__ == '__main__':
     while not rospy.is_shutdown():
         print("***Kinect to AR6")
         
-        T_kinect_ar = calibrator.get_transfom("/ar_marker_{}".format(markernumber), "/kinect2_rgb_optical_frame")
+        T_ar_kinect = calibrator.get_transfom("/ar_marker_{}".format(markernumber), "/kinect2_rgb_optical_frame")
 
-        T_eef_world = calibrator.get_transfom("/world", "/j2s7s300_end_effector")
-        T_ar_eef = RigidTransform(rotation=np.eye(3) , translation=[0,0,0], from_frame="/j2s7s300_end_effector", to_frame="/ar_marker_{}".format(markernumber))
+        T_world_eef = calibrator.get_transfom("/world", "/j2s7s300_end_effector")
+        T_eef_ar = RigidTransform(rotation=np.eye(3) , translation=[0,0,0], from_frame="/ar_marker_{}".format(markernumber), to_frame="/j2s7s300_end_effector")
 
-        T_world_kinect = T_kinect_ar*T_ar_eef*T_eef_world
+        T_world_kinect = T_world_eef*T_eef_ar*T_ar_kinect
         print("resulting",T_world_kinect.from_frame, T_world_kinect.to_frame)
 
         print(T_world_kinect)
