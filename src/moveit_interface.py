@@ -47,6 +47,7 @@ class RobotPlanner:
         print("add box")
         
         #add the desk
+        #TODO get orientation and size correct
         self.scene.add_mesh("table",p,"Desk.stl",size = (0.01, 0.01, 0.01))
 
         p.pose.position.y = 0
@@ -59,6 +60,9 @@ class RobotPlanner:
         self.scene.add_box("base",p,(0.15,0.15,0.15)) #add a base for safety
 
     def plan(self, position):
+        #TODO allow for position to be a string of stored position
+        #TODO figure out how to store positions
+        #TODO enter gravity comp mode to teach positions
         """ Plan to a position
         """
         self.group.clear_pose_targets()
@@ -86,6 +90,7 @@ class RobotPlanner:
             rospy.logwarn("Plan is None, planning might not have been completed or failed")
             return
         self.group.execute(self.solved_plan)
+        print("execution complete")
 
 class GripController:
     def __init__(self):
