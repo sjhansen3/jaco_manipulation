@@ -18,6 +18,21 @@ class GraspRequest:
         self.grasp_object = grasp_object
         self.target_location = target_location
 
+
+
+class UserParser:
+    self.locations = {}
+    self.locations["home"] = spacial_location.Pose(())
+
+    @staticmethod
+    def process_input(data):
+
+    @staticmethod
+    def grasp_request(data):
+
+    @staticmethod
+    def is_proceed(data):
+
 # define state Foo
 class GetGraspRequest(smach.State):
     def __init__(self):
