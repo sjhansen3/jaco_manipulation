@@ -1,6 +1,9 @@
 import autolab_core
 import numpy as np
 import geometry_msgs.msg
+import copy
+import os
+import rospkg
 
 class Quaternion:
     def __init__(self, orientation, enforce_norm=True):
@@ -32,6 +35,7 @@ class Quaternion:
     @property
     def orientation(self):
         return self._orientation
+
     @property
     def x(self):
         return self._orientation[0]
@@ -86,7 +90,7 @@ class Quaternion:
         q.x = self.x
         q.y = self.y
         q.z = self.z
-        return q
+        return copy.deepcopy(q)
 
 class Pose:
     """ class for maintaining pose of an object in space
@@ -113,11 +117,44 @@ class Pose:
         pose = geometry_msgs.msg.Pose()
         pose.orientation = self._orientation.ros_message
         pose.position = point
-        return pose
+        return copy.deepcopy(pose)
 
     @property
     def position(self):
         return self._point
+    
+    def save(self, pose_name, package_relative_folder="/poses/"):
+        """store the pose for use later with a name
+        Parameters
+        ----------
+        filename : :obj:`str`
+            The file to save the collection to.
+        """
+        rospack = rospkg.RosPack()
+        package_path = rospack.get_path('jaco_manipulation')
+        pose_folder_path = package_path + package_relative_folder
+
+        np.save(pose_folder_path+pose_name+"_position", self._point.vector)
+        np.save(pose_folder_path+pose_name+"_orientation", self._orientation.orientation)
+    
+    @staticmethod
+    def load(pose_name, package_relative_folder="/poses/"):
+        """Loads data from a file.
+        Parameters
+        ----------
+        filename: `str`
+            The name of the pose to load
+        Returns
+        -------
+        :obj: Pose object
+        """
+        rospack = rospkg.RosPack()
+        package_path = rospack.get_path('jaco_manipulation')
+        pose_folder_path = package_path + package_relative_folder
+        
+        position = np.load(pose_folder_path+pose_name+"_position.npy")
+        orientation = np.load(pose_folder_path+pose_name+"_orientation.npy")
+        return Pose(position, orientation)
 
     @property
     def orientation(self):
@@ -139,3 +176,13 @@ if __name__ == "__main__":
     print(pose.orientation.x)
     print(pose.orientation[1])
     print(pose.ros_message)
+    pose.save("test_pose")
+    newpose = Pose.load("test_pose")
+    
+    print(newpose.position.x)
+    print(newpose.position.y)
+    print(newpose.position.z)
+    print(newpose.orientation.x)
+    print(newpose.orientation[1])
+    print(newpose.ros_message)
+

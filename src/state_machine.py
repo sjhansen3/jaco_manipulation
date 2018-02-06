@@ -19,7 +19,6 @@ class GraspRequest:
         self.target_location = target_location
 
 
-
 class UserParser:
     self.locations = {}
     self.locations["home"] = spacial_location.Pose(())
