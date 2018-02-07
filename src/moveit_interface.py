@@ -5,9 +5,12 @@ import copy
 import rospy
 import moveit_commander
 import moveit_msgs.msg
+from moveit_msgs.srv import GetPositionIK, GetPositionFK
+
 import geometry_msgs.msg
 import shape_msgs.msg
 import std_msgs.msg
+
 import rospkg
 import kinova_msgs.msg
 import actionlib
@@ -23,14 +26,23 @@ class RobotPlanner:
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
         self.group = moveit_commander.MoveGroupCommander("arm")
-        self.group.set_goal_joint_tolerance(0.001)
+
+        self.group.set_planner_id("RRTConnectkConfigDefault") 
+        rospy.sleep(1)
+        self.group.set_goal_position_tolerance(0.001)
+        #self.group.set_goal_orientation_tolerance(0.005)
+        #self.group.set_goal_
+        #self.group.set_goal_tolerance(0.005)
         self.group.allow_replanning(True)
-        self.group.set_planner_id("RRTConnectConfigDefault") 
         #self.group.set_goal_position_tolerance(0.005)
 
         self.add_scene_items()
         self.solved_plan = None
         self.eef_name = "j2s7s300_end_effector"
+
+        # Set up the FK service
+        rospy.wait_for_service('/compute_fk')
+        self.compute_fk = rospy.ServiceProxy('/compute_fk', GetPositionFK)
 
     def add_scene_items(self):
         """
@@ -93,9 +105,25 @@ class RobotPlanner:
         self.group.set_start_state_to_current_state()
         rospy.sleep(1)
         self.solved_plan = self.group.plan() #automatically displays trajectory
-        rospy.loginfo("Displaying plan {}".format(self.solved_plan))
+        #print "\n************SOLVED PLAN***************\n"
+        #print type(self.solved_plan)
+        cur_joints = list(self.solved_plan.joint_trajectory.points[-1].positions)
+        posefk = self.fk(cur_joints).pose_stamped[0].pose
+        final_pose_res = Pose([posefk.position.x, posefk.position.y, posefk.position.z],[posefk.orientation.x, posefk.orientation.y, posefk.orientation.z, posefk.orientation.w])
+        #print final_pose_res
+        #print "\n***************************************\n"
+        return pose, final_pose_res 
+        #rospy.loginfo("Displaying plan {}".format(self.solved_plan))
         #TODO add return value for success or failure
     
+    def fk(self, joints, links=['j2s7s300_end_effector']):
+        """ Computes the forward kinematics """
+        header = std_msgs.msg.Header()
+        robot_state = moveit_msgs.msg.RobotState()
+        robot_state.joint_state.name = ['j2s7s300_joint_{}'.format(i) for i in range(1,8)]
+        robot_state.joint_state.position = joints
+        return self.compute_fk(header, links, robot_state)
+
     #TODO add waypoint planning for pregrasp -> grasp
     def plan_waypoints(self, waypoints):
         """
@@ -122,8 +150,11 @@ class RobotPlanner:
     
     @property
     def current_pose(self):
-        print(self.robot.get_current_state())
-        return self.group.get_current_pose(self.eef_name)
+        cur_pose = self.group.get_current_pose(self.eef_name)
+        position = [cur_pose.pose.position.x, cur_pose.pose.position.y, cur_pose.pose.position.z]
+        orientation = [cur_pose.pose.orientation.x, cur_pose.pose.orientation.y, cur_pose.pose.orientation.z, cur_pose.pose.orientation.w]
+        pose = Pose(position,orientation)
+        return pose
 
 
 class GripController:
@@ -260,36 +291,60 @@ def run_pick_place():
     raw_input("plan to home_grip commplete, anykey and enter to execute")
     robot_planner.execute()
 
+
 def test_plan_waypoints():
     rospy.sleep(2)
     robot_planner = RobotPlanner()
     grip_controller = GripController()
     
-    waypoints = []
+    downstream_error = []
+    rrt_error = []
+    for i in range(5):
+        #home grip location
+        downstream, rrt = move_to_position("pos_1", robot_planner)
+        downstream_error.append(downstream)
+        rrt_error.append(rrt)
 
-    # first orient gripper and move forward (+x)
-    wpose = geometry_msgs.msg.Pose()
-    wpose.orientation.w = 1.0
-    wpose.position.x += 0.1
-    waypoints.append(copy.deepcopy(wpose))
+        #pre grip location
+        downstream, rrt = move_to_position("pos_2", robot_planner)
+        downstream_error.append(downstream)
+        rrt_error.append(rrt)
+    print "\n********RRT Error*********\n", rrt_error
+    print "\n*******DOWNSTREAM*********\n", downstream_error
 
+def move_to_position(position_name, robot_planner):
+    #home grip location
+    pose_request, pose_final_plan = robot_planner.plan(position_name)
+    #grip_controller.grip("percent",[0,0,0])
+    raw_input("plan to {} commplete, anykey and enter to execute".format(position_name))
+    robot_planner.execute()
+    rospy.sleep(2)
+    
+    act_pose = robot_planner.current_pose
+    downstream_error = act_pose.position - pose_final_plan.position
+    rrt_error = pose_request.position - pose_final_plan.position
+    
+    
+    print "actual pose: ", act_pose
+    print "requested pose:  ", pose_request
+    print "final pose of plan:  ", pose_final_plan
+    
+    print "rrt_error: ", rrt_error
+    rrt_norm = np.linalg.norm(np.asarray(rrt_error[0:3]))
+    print "rrt_norm:   ", rrt_norm
 
-    # second move down
-    wpose.position.z -= 0.10
-    waypoints.append(copy.deepcopy(wpose))
-
-    # third move to the side
-    wpose.position.y += 0.05
-    waypoints.append(copy.deepcopy(wpose))
-    robot_planner.plan_waypoints(waypoints) 
-
+    downstream_norm = np.linalg.norm(np.asarray(downstream_error[0:3]))
+    print "downstream_error: ", downstream_error
+    print "downstream_norm: ", downstream_norm 
+    return downstream_norm, rrt_norm
 
 if __name__ == '__main__':
     rospy.init_node('moveit_interface',
                         anonymous=True)
 
-    planner = ARTrackPlanner()
-    planner.get_grasp_plan("cup")
+    test_plan_waypoints()
+    #planner = ARTrackPlanner()
+    #planner.get_grasp_plan("cup")
     #sample code for pick and place like application
     #save_poses()
     #run_pick_place()
