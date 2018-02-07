@@ -13,6 +13,7 @@ import kinova_msgs.msg
 import actionlib
 from spacial_location import Pose
 import numpy as np
+from grasp_planner import ARTrackPlanner
 
 class RobotPlanner:
     #TODO consider renaming this - it has expanded beyond a planner
@@ -211,6 +212,10 @@ def run_pick_place():
     robot_planner = RobotPlanner()
     grip_controller = GripController()
 
+    #Get the ARTracker Pose
+    grasp_planner = ARTrackPlanner()
+    grasp_pose = grasp_planner.get_grasp_plan("cup")
+
     #home grip location
     robot_planner.plan("home_grip")
     grip_controller.grip("percent",[0,0,0])
@@ -280,11 +285,12 @@ def test_plan_waypoints():
 
 
 if __name__ == '__main__':
-    rospy.init_node('move_group_python_interface_tutorial',
+    rospy.init_node('moveit_interface',
                         anonymous=True)
 
-
+    planner = ARTrackPlanner()
+    planner.get_grasp_plan("cup")
     #sample code for pick and place like application
     #save_poses()
-    run_pick_place()
+    #run_pick_place()
     #rospy.spin()

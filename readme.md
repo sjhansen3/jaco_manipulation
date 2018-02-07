@@ -16,7 +16,7 @@ Which does does the following:
 ## load drivers and planner for real robot
 1. Launch the **kinova_driver** node to control the arm.
 
-`roslaunch kinova_bringup kinova_robot.launch kinova_robotType:=j2s7s300`
+`roslaunch kinova_bringup kinova_robot.launch kinova_robotType:=j2s7s300 /joint_states:=/j2s7s300_driver/out/joint_state`
 
 2. run **rviz** with manipulation.launch.
 
@@ -24,14 +24,16 @@ Which does does the following:
 
 3. Load extra drivers for fingers and **moveit**.
 
-`roslaunch j2s7s300_moveit_config j2s7s300_demo.launch `
+`roslaunch j2s7s300_moveit_config j2s7s300_demo.launch /joint_states:=/j2s7s300_driver/out/joint_state`
 Which loads the following:
 * move_group node, with controllers, defined in #TODO fill this in/config/controllers.yaml
 * joint_trajectory_action_server node available in kinova_driver
 * gripper_command_action_server node available in kinova_driver
 * rviz
 
-##Command line tool for saving configs
+## Command line tool for saving poses
+
+`rosrun jaco_manipulation store_poses.py /joint_states:=/j2s7s300_driver/out/joint_state`
 
 
 ## loading AR Trackers
