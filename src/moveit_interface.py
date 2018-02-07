@@ -37,13 +37,15 @@ class RobotPlanner:
         """
         #TODO add scene item for tripod and bookshelf
         self.scene.remove_world_object("ground")
-        self.scene.remove_world_object("table")
+        #self.scene.remove_world_object("table")
+
         rospy.sleep(1)
+
         p = geometry_msgs.msg.PoseStamped()
         p.header.frame_id = "world"
         p.pose.position.x = -1
         p.pose.position.y = 0.5
-        p.pose.position.z = -0.05
+        p.pose.position.z = -0.11
         p.pose.orientation.x = 0
         p.pose.orientation.y = 0
         p.pose.orientation.z = 0
@@ -56,7 +58,7 @@ class RobotPlanner:
         package_path = rospack.get_path('jaco_manipulation')
         model_folder_path = package_path + "/models/"
 
-        self.scene.add_mesh("table",p,model_folder_path+"Desk.stl",size = (0.01, 0.01, 0.01))
+        #self.scene.add_mesh("table",p,model_folder_path+"Desk.stl",size = (0.01, 0.01, 0.01))
 
         p.pose.position.y = 0
         p.pose.position.x = 0
@@ -64,21 +66,21 @@ class RobotPlanner:
         self.scene.add_box("ground", p, (3, 3, 0.02)) #add a "ground plane"
 
 
-        p.pose.position.z = 0
+        p.pose.position.z = -0.05
         self.scene.add_box("base",p,(0.15,0.15,0.15)) #add a base for safety
 
-    def plan(self, pose):
+    def plan(self, pose_input):
         """ find a plan to the position
         Params
         ---
-        position: The pose to plan to. `string` or `Pose`
+        pose_input: The pose to plan to. `string` or `Pose`
         Returns
         ---
         1 if plan succeeded 0 otherwise
         """
-        if isinstance(position, string):
-            pose = Pose.load(position)
-        elif isinstance(position, Pose):
+        if isinstance(pose_input, basestring):
+            pose = Pose.load(pose_input)
+        elif isinstance(pose_input, Pose):
             pass
         else:
             raise ValueError("plan only supports pose objects")
@@ -209,28 +211,49 @@ def run_pick_place():
     robot_planner = RobotPlanner()
     grip_controller = GripController()
 
-    #pre grip location
-    robot_planner.plan([0.3,0.3,0.4])
+    #home grip location
+    robot_planner.plan("home_grip")
     grip_controller.grip("percent",[0,0,0])
-    raw_input("plan to start pose commplete, anykey and enter to execute")
+    raw_input("plan to home_grip commplete, anykey and enter to execute")
+    robot_planner.execute()
+
+    #pre grip location
+    robot_planner.plan("grasp_pre_hardcode")
+    raw_input("plan to grasp_pre_hardcode commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #grip location
-    robot_planner.plan([0.7,0.3,0.4])
-    raw_input("plan to grip pose commplete, anykey and enter to execute")
+    robot_planner.plan("grasp_hardcode")
+    raw_input("plan to grasp_hardcode commplete, anykey and enter to execute")
     robot_planner.execute()
     
     #grip object
     raw_input("grip object? anykey to execute")
     grip_controller.grip("percent",[75,75,75])
     
-    #pull back
-    robot_planner.plan([0.3,0.3,0.3])
+    #target pre
+    robot_planner.plan("grasp_target_pre")
+    raw_input("plan to grasp_target_pre commplete, anykey and enter to execute")
     robot_planner.execute()
-    print("moving back to start")
-    rospy.sleep(3)
+
+    #target location
+    robot_planner.plan("grasp_target")
+    raw_input("plan to grasp_target commplete, anykey and enter to execute")
+    robot_planner.execute()
+
     #release object
+    raw_input("release object? anykey to execute")
     grip_controller.grip("percent",[0,0,0])
+
+    #go bak to pre grip location
+    robot_planner.plan("grasp_target_after")
+    raw_input("plan to back to grasp_pre_hardcode commplete, anykey and enter to execute")
+    robot_planner.execute()
+
+    #home grip location
+    robot_planner.plan("home_grip")
+    raw_input("plan to home_grip commplete, anykey and enter to execute")
+    robot_planner.execute()
 
 def test_plan_waypoints():
     rospy.sleep(2)
@@ -262,6 +285,6 @@ if __name__ == '__main__':
 
 
     #sample code for pick and place like application
-    save_poses()
-
+    #save_poses()
+    run_pick_place()
     #rospy.spin()
