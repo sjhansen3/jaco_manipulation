@@ -13,10 +13,10 @@ Which does does the following:
 3. **Robot state publisher** Given the published joint states, publish tf for the robot links
 4. **launch rviz** With manipulation_config.rviz as the coniguration file
 
-## Real robot
+## load drivers and planner for real robot
 1. Launch the **kinova_driver** node to control the arm.
 
-`roslaunch kinova_bringup kinova_robot.launch kinova_robotType:=j2s7s300`
+`roslaunch kinova_bringup kinova_robot.launch kinova_robotType:=j2s7s300 /joint_states:=/j2s7s300_driver/out/joint_state`
 
 2. run **rviz** with manipulation.launch.
 
@@ -24,20 +24,24 @@ Which does does the following:
 
 3. Load extra drivers for fingers and **moveit**.
 
-`roslaunch robot_name_moveit_config robot_name_demo.launch`
+`roslaunch j2s7s300_moveit_config j2s7s300_demo.launch /joint_states:=/j2s7s300_driver/out/joint_state`
 Which loads the following:
 * move_group node, with controllers, defined in #TODO fill this in/config/controllers.yaml
 * joint_trajectory_action_server node available in kinova_driver
 * gripper_command_action_server node available in kinova_driver
 * rviz
 
+## Command line tool for saving poses
 
-## load AR Trackers
+`rosrun jaco_manipulation store_poses.py /joint_states:=/j2s7s300_driver/out/joint_state`
+
+
+## loading AR Trackers
 `roslaunch jaco_manipulation ar_track_alavar.launch`
 1. **launch AR tracker** indigo branch of ar_track_alvar https://github.com/ros-perception/ar_track_alvar/tree/indigo-devel
 2. **launch kinect bridge** iai_kinect2 from https://github.com/code-iai/iai_kinect2/tree/master/kinect2_bridge
 3. **calibrate the kinect** using calibrate_camera.py
-* this requries ar_tracker_6 be placed right belwo the robot
+* this requries ar_tracker_6 be placed right below the robot
 
 #TODO Point clouds are only published when the launch file is used. Run roslaunch kinect2_bridge kinect2_bridge.launch
 
