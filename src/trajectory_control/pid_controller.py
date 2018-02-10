@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Adapted from Andrea Bajcsy
 https://github.com/abajcsy/iact_control/
@@ -24,7 +26,7 @@ roslib.load_manifest('kinova_demo')
 
 PREFIX = 'j2s7s300_driver'
 
-EPSILON = 0.10
+EPSILON = 0.05
 MAX_CMD_TORQUE = 40.0
 INTERACTION_TORQUE_THRESHOLD = 8.0
 
@@ -56,12 +58,12 @@ class PIDController(object):
         sim_flag 				  - flag for if in simulation or not
     """
 
-    def __init__(self, robot):
+    def __init__(self):
         """
         Setup of the ROS node. Publishing computed torques happens at 100Hz.
         """
 
-        self.robot = robot #OpenRAVE robot I think?
+        #self.robot = robot #OpenRAVE robot I think?
         self.mode = MODE.hold
         self.reached_start = False
         self.reached_goal = False
@@ -81,7 +83,7 @@ class PIDController(object):
 
         # P, I, D gains
         p_gain = 50.0
-        i_gain = 0.0
+        i_gain = 0.00
         d_gain = 20.0
         self.P = p_gain * np.eye(7)
         self.I = i_gain * np.eye(7)
@@ -111,16 +113,26 @@ class PIDController(object):
 
         while not rospy.is_shutdown() and not (self.reached_goal and
                                                self.reached_start):
+            #print "sending command", self.cmd
             self.vel_pub.publish(ros_utils.cmd_to_JointVelocityMsg(self.cmd))
             r.sleep()
 
     def execute_trajectory(self, traj, duration=10.):
 
-        self.start_admittance_mode()
+        #self.start_admittance_mode()
+        
 
-        trajectory = self.fix_joint_angles(traj)
-        self.trajectory = trajectory
+        trajectory = traj #self.fix_joint_angles(traj)
+        self.trajectory = traj
+
+        print "self.trajectory", self.trajectory
+
+        #TODO using this function garuntees that distance corresponds to time,
+        # I should probably use the time points provided by moveit.
+        # time_points will work with any list like structure. 1XN numpy array where
+        # N is the number of time points
         self.time_points = self.time_trajectory(trajectory, duration)
+        print "self.time_points", self.time_points
 
         # ---- Trajectory Setup ---- #
 
@@ -129,6 +141,8 @@ class PIDController(object):
 
         self.start = trajectory[0].reshape((7, 1))
         self.goal = trajectory[-1].reshape((7, 1))
+        print "self.start", self.start
+        print "self.goal", self.goal
 
         self.target_pos = trajectory[0].reshape((7, 1))
         self.target_index = 0
@@ -143,6 +157,7 @@ class PIDController(object):
 
         self.execute_loop()
 
+        print "******************************************** END Admittance control"
         # end admittance control mode
         self.stop_admittance_mode()
         self.executing = False
@@ -263,7 +278,8 @@ class PIDController(object):
         """
         Return a control torque based on PID control
         """
-        error = -((self.target_pos - pos + np.pi) % (2 * np.pi) - np.pi)
+        #TODO what should I do with the pi's here??
+        error = PIDController.shortest_angular_distance(self.target_pos, pos)
         return -self.controller.update_PID(error)
 
     def joint_torques_callback(self, msg):
@@ -288,7 +304,7 @@ class PIDController(object):
 
         # update the OpenRAVE simulation
         # self.planner.update_curr_pos(curr_pos)
-        self.update_robot(curr_pos) #TODO can I just delete this line?
+        #self.update_robot(curr_pos) #TODO can I just delete this line?
         self.last_dof = curr_pos
 
         # update target position to move to depending on:
@@ -322,8 +338,9 @@ class PIDController(object):
             return
 
         if self.mode == MODE.stepping:
-            dist_from_goal = -((curr_pos - self.goal + np.pi) %
-                               (2 * np.pi) - np.pi)
+            #TODO repeated pi code - can we centralize this?
+
+            dist_from_goal = PIDController.shortest_angular_distance(curr_pos, self.goal)
             if np.all(np.abs(dist_from_goal) < EPSILON):
                 self.reached_goal = True
             return
@@ -332,10 +349,14 @@ class PIDController(object):
 
             # check if the arm is at the start of the path to execute
             if not self.reached_start:
+                print "not reached start"
+                print "curr_pos", curr_pos, "self.goal", self.goal
 
-                dist_from_start = -((curr_pos - self.start + np.pi) %
-                                    (2 * np.pi) - np.pi)
+                #dist_from_start = -((curr_pos - self.start + np.pi) %
+                #                    (2 * np.pi) - np.pi)
+                dist_from_start = PIDController.shortest_angular_distance(curr_pos, self.start)
                 dist_from_start = np.abs(dist_from_start) #TODO this waas fabs but my version of numpy doeesnt have fabs
+                print dist_from_start, "distance from start"
                 # print "d to start: ", np.linalg.norm(dist_from_start)
 
                 # if all joints are close enough, robot is at start
@@ -353,8 +374,7 @@ class PIDController(object):
 
                 if not self.reached_goal:
 
-                    dist_from_goal = -((curr_pos - self.goal + np.pi) %
-                                       (2 * np.pi) - np.pi)
+                    dist_from_goal = PIDController.shortest_angular_distance(curr_pos, self.goal)
                     if np.all(np.abs(dist_from_goal) < EPSILON):
                         self.reached_goal = True
 
@@ -363,6 +383,7 @@ class PIDController(object):
 
     def interpolate_trajectory(self, time):
         if time >= self.trajectory_time:
+            #TODO is this the correct behavior? if time is greater than 
             target_pos = self.trajectory[-1]
         else:
             while self.time_points[self.target_index] < time:
@@ -381,20 +402,32 @@ class PIDController(object):
         return np.array(target_pos).reshape((7, 1))
 
     def fix_joint_angles(self, trajectory):
+        #TODO is off by pi an issue with openRAVE or kinova? 
+        # should I fix for kinova as well? TBD
         trajectory = trajectory.copy()
         for dof in trajectory:
             dof[2] -= np.pi
         return trajectory[:,:7]
+    
+    @staticmethod
+    def shortest_angular_distance(angle1, angle2):
+        return -((angle1 - angle2 + np.pi) % (2 * np.pi) - np.pi) 
 
-    def update_robot(self, dof):
-        #TODO replace self.robot with something else
-        #update the robot joint positions for kinematics?
-        if self.robot:
-            dof = dof.copy().reshape((7))
-            dof[2] += np.pi
-            self.robot.SetDOFValues(np.append(dof, [0, 0, 0]))
-
+def shortest_angular_distance_test():
+    pi = np.pi
+    tests = [[0, pi, pi], [0, pi/2, pi/2], [0, 2*pi, 0], [pi/2, 3*pi, pi/2]]
+    for test in tests:
+        res = test[2]
+        test1_res = PIDController.shortest_angular_distance(test[0], test[1])
+        test2_res = PIDController.shortest_angular_distance(test[1], test[0])
+        print "res {}, test1_res, {}, test2_res {}".format(res, test1_res, test2_res)
 
 if __name__ == '__main__':
-    argument = ' '.join(sys.argv[1:])
-    PIDController(eval(argument))
+    #argument = ' '.join(sys.argv[1:])
+    controller = PIDController()
+    home = np.asarray([180]*7)*(np.pi/180)
+    pnt = np.asarray([80.363975525, 197.091796875, 179.857910156, 43.4620018005, -94.3617858887, 257.270996094, 287.989074707])*(np.pi/180)
+    traj = np.vstack([home, pnt])
+    print traj
+    controller.execute_trajectory(traj)
+
