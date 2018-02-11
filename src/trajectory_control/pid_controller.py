@@ -19,7 +19,6 @@ import std_msgs.msg
 import sensor_msgs.msg
 import kinova_msgs.srv
 
-from control_msgs.msg import FollowJointTrajectoryFeedback
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 import pid
@@ -31,7 +30,7 @@ roslib.load_manifest('kinova_demo')
 PREFIX = 'j2s7s300_driver'
 
 GOAL_EPSILON = 0.005 #if all joints are less than epsilon at goal, then complete, goal is achieved
-START_EPSILON = 0.02 #if all joints are less than epsilon at start, the trajectory can begin (prevents jumping)
+START_EPSILON = 0.1 #if all joints are less than epsilon at start, the trajectory can begin (prevents jumping)
 START_MAX_DIST = 0.5 #if ANY joint is greater than start max distance, throw an error
 
 MAX_CMD_VEL = 40.0 #Maximum commanded velocity
@@ -91,40 +90,19 @@ class PIDController(object):
         self.D = d_gain * np.eye(7)
         self.controller = pid.PID(self.P, self.I, self.D, 0, 0)
 
-        # ---- ROS Setup ---- #
-
-        rospy.init_node("pid_trajectory_controller", anonymous=True)
-
-        # create joint-velocity publisher
-        self.vel_pub = rospy.Publisher(PREFIX + '/in/joint_velocity',
-                                       kinova_msgs.msg.JointVelocity,
-                                       queue_size=1)
-
-
-
-        #subscribe to trajectory  /j2s7s300_driver/trajectory_controller/command
-        rospy.Subscriber(PREFIX + '/trajectory_controller/command', JointTrajectory, self.execute_trajectory)
-           
-        #TODO check if this is publishing on the correct topic
-        self.feedback_pub = rospy.Publisher(PREFIX+'trajectory_controller/state', FollowJointTrajectoryFeedback, queue_size=1)
-        #pub_joint_feedback_ = nh_.advertise<control_msgs::FollowJointTrajectoryFeedback>("trajectory_controller/state", 1);
-        while not rospy.is_shutdown():
-            rospy.spin()
-
-    def execute_loop(self):
-        r = rospy.Rate(100)
-
-        while not rospy.is_shutdown() and not (self.reached_goal and
-                                               self.reached_start):
-            #print "sending command", self.cmd
-            self.vel_pub.publish(ros_utils.cmd_to_JointVelocityMsg(self.cmd))
-            r.sleep()
+        self.joint_sub = None
+        self.is_shutdown = False
 
     def shutdown_controller(self):
+        self.is_shutdown = True
         self.joint_sub.unregister()
         self.trajectory = None
+        rospy.loginfo("Shutting Down PID Controller")
 
-    def execute_trajectory(self, traj):
+    def load_trajectory(self, traj):
+        """ executes a trajectory
+        traj: a :trajectory_msgs.msg.JointTrajectory: message from ROS
+        """
         #traj = JointTrajectory()
         print "got traj", traj
         print "traj.points[0]", traj.points[0]
@@ -134,7 +112,7 @@ class PIDController(object):
                          kinova_msgs.msg.JointAngles,
                          self.joint_angles_callback, queue_size=1)
 
-        
+
         #TODO create process traj method
         
         num_points = len(traj.points)
@@ -175,12 +153,9 @@ class PIDController(object):
 
         # keeps running time since beginning of path
         self.path_start_T = time.time()
+        rospy.loginfo("Loaded Trajectory")
 
-        self.execute_loop()
-        self.shutdown_controller()
-        print "******************************************** END Trajectory control"
-
-    def PID_control(self, pos):
+    def update(self, pos):
         """
         Return a control torque based on PID control
         """
@@ -208,7 +183,7 @@ class PIDController(object):
         self.update_target_pos(curr_pos)
 
         # update cmd from PID based on current position
-        self.cmd = self.PID_control(curr_pos)
+        self.cmd = self.update(curr_pos)
 
         #TODO change references to torque to velocity - I believe its just velocity
         # check if each angular torque is within set limits
@@ -243,8 +218,8 @@ class PIDController(object):
             is_too_far = np.any(dist_from_start > START_MAX_DIST)
             if is_too_far:
                 #TODO this should be more principled
+                self.shutdown_controller()
                 rospy.logfatal(ValueError("current joint angles: {} are too far from the trajectory start: {}".format(curr_pos, self.start)))
-                rospy.signal_shutdown("reason")
 
             if is_at_start:
                 self.reached_start = True
@@ -257,7 +232,7 @@ class PIDController(object):
             self.target_pos = self.interpolate_trajectory(t)
 
             if not self.reached_goal:
-
+                #TODO add a timeout if the goal is taking too long
                 dist_from_goal = PIDController.shortest_angular_distance(curr_pos, self.goal)
                 is_at_goal = np.all(np.abs(dist_from_goal) < GOAL_EPSILON)
                 if is_at_goal:
