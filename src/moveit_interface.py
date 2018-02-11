@@ -29,12 +29,10 @@ class RobotPlanner:
 
         self.group.set_planner_id("RRTConnectkConfigDefault") 
         rospy.sleep(1)
-        self.group.set_goal_position_tolerance(0.001)
-        #self.group.set_goal_orientation_tolerance(0.005)
-        #self.group.set_goal_
-        #self.group.set_goal_tolerance(0.005)
+        self.group.set_goal_tolerance(0.001)
+
         self.group.allow_replanning(True)
-        #self.group.set_goal_position_tolerance(0.005)
+        
 
         self.add_scene_items()
         self.solved_plan = None
@@ -43,6 +41,11 @@ class RobotPlanner:
         # Set up the FK service
         rospy.wait_for_service('/compute_fk')
         self.compute_fk = rospy.ServiceProxy('/compute_fk', GetPositionFK)
+
+
+        # Set up the IK service
+        rospy.wait_for_service('/compute_ik')
+        self.compute_ik = rospy.ServiceProxy('/compute_ik', GetPositionIK)
 
     def add_scene_items(self):
         """
@@ -105,24 +108,37 @@ class RobotPlanner:
         self.group.set_start_state_to_current_state()
         rospy.sleep(1)
         self.solved_plan = self.group.plan() #automatically displays trajectory
-        #print "\n************SOLVED PLAN***************\n"
-        #print type(self.solved_plan)
+
         cur_joints = list(self.solved_plan.joint_trajectory.points[-1].positions)
         posefk = self.fk(cur_joints).pose_stamped[0].pose
         final_pose_res = Pose([posefk.position.x, posefk.position.y, posefk.position.z],[posefk.orientation.x, posefk.orientation.y, posefk.orientation.z, posefk.orientation.w])
-        #print final_pose_res
-        #print "\n***************************************\n"
         return pose, final_pose_res 
-        #rospy.loginfo("Displaying plan {}".format(self.solved_plan))
         #TODO add return value for success or failure
     
     def fk(self, joints, links=['j2s7s300_end_effector']):
-        """ Computes the forward kinematics """
+        """ Computes the forward kinematics 
+        joints: an array of joint positions
+        """
         header = std_msgs.msg.Header()
         robot_state = moveit_msgs.msg.RobotState()
         robot_state.joint_state.name = ['j2s7s300_joint_{}'.format(i) for i in range(1,8)]
         robot_state.joint_state.position = joints
         return self.compute_fk(header, links, robot_state)
+
+    
+    # def ik(self, pose_stamped, group_name='arm'):
+    #     """ Computes the inverse kinematics """
+    #     req = PositionIKRequest()
+    #     req.group_name = group_name
+    #     req.pose_stamped = pose_stamped
+    #     req.timeout.secs = 0.1
+    #     req.avoid_collisions = False
+
+    #     try:
+    #         res = self.compute_ik(req)
+    #         return res
+    #     except rospy.ServiceException, e:
+    #         print("IK service call failed: {}".format(e))
 
     #TODO add waypoint planning for pregrasp -> grasp
     def plan_waypoints(self, waypoints):
@@ -315,7 +331,7 @@ def test_plan_waypoints():
 def move_to_position(position_name, robot_planner):
     #home grip location
     pose_request, pose_final_plan = robot_planner.plan(position_name)
-    #grip_controller.grip("percent",[0,0,0])
+
     raw_input("plan to {} commplete, anykey and enter to execute".format(position_name))
     robot_planner.execute()
     rospy.sleep(2)
@@ -343,9 +359,3 @@ if __name__ == '__main__':
                         anonymous=True)
 
     test_plan_waypoints()
-    #planner = ARTrackPlanner()
-    #planner.get_grasp_plan("cup")
-    #sample code for pick and place like application
-    #save_poses()
-    #run_pick_place()
-    #rospy.spin()
