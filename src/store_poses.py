@@ -16,11 +16,8 @@ def save_poses():
         if pose_name == "q":
             return        
         else:
-            cur_pose = robot_planner.current_pose
-            print(cur_pose, "cur_pose")
-            position = [cur_pose.pose.position.x, cur_pose.pose.position.y, cur_pose.pose.position.z]
-            orientation = [cur_pose.pose.orientation.x, cur_pose.pose.orientation.y, cur_pose.pose.orientation.z, cur_pose.pose.orientation.w]
-            pose = Pose(position,orientation)
+            pose = robot_planner.current_pose
+            print(pose, "cur_pose")
             pose.save(pose_name)
             print("Saved pose: \n{}\n under name {}".format(pose,pose_name))
 
