@@ -33,7 +33,7 @@ GOAL_EPSILON = 0.005 #if all joints are less than epsilon at goal, then complete
 START_EPSILON = 0.1 #if all joints are less than epsilon at start, the trajectory can begin (prevents jumping)
 START_MAX_DIST = 0.5 #if ANY joint is greater than start max distance, throw an error
 
-MAX_CMD_VEL = 40.0 #Maximum commanded velocity
+MAX_CMD_VEL = 35.0 #Maximum commanded velocity
 
 class PIDController(object):
     """
@@ -82,8 +82,8 @@ class PIDController(object):
         self.joint_torques = np.zeros((7, 1))
 
         # P, I, D gains
-        p_gain = 50.0
-        i_gain = 0.00
+        p_gain = 60.0
+        i_gain = 0
         d_gain = 20.0
         self.P = p_gain * np.eye(7)
         self.I = i_gain * np.eye(7)
@@ -97,42 +97,40 @@ class PIDController(object):
         self.is_shutdown = True
         self.joint_sub.unregister()
         self.trajectory = None
+        self.trajectory_time = None
+        self.time_points = None
+        self.start = None
+        self.goal = None
         rospy.loginfo("Shutting Down PID Controller")
+
+
+    @staticmethod
+    def process_traj_msg(traj):
+        num_points = len(traj.points)
+        time_points = np.empty(num_points)
+        time_points[:] = np.nan
+
+        trajectory = np.empty((num_points,7))
+        trajectory[:] = np.nan
+        for idx, point in enumerate(traj.points):
+            trajectory[idx,:] = point.positions
+            time_points[idx] = point.time_from_start.secs + point.time_from_start.nsecs*1e-9
+        return (trajectory, time_points)
 
     def load_trajectory(self, traj):
         """ executes a trajectory
         traj: a :trajectory_msgs.msg.JointTrajectory: message from ROS
         """
-        #traj = JointTrajectory()
-        print "got traj", traj
-        print "traj.points[0]", traj.points[0]
+        rospy.loginfo("Loading trajectory into controller")
 
-        # create subscriber to joint_angles
+        # start subscriber to joint_angles
         self.joint_sub = rospy.Subscriber(PREFIX + '/out/joint_angles',
                          kinova_msgs.msg.JointAngles,
                          self.joint_angles_callback, queue_size=1)
 
 
         #TODO create process traj method
-        
-        num_points = len(traj.points)
-        self.time_points = np.empty(num_points)
-        self.time_points[:] = np.nan
-
-        self.trajectory = np.empty((num_points,7))
-        self.trajectory[:] = np.nan
-        for idx, point in enumerate(traj.points):
-            self.trajectory[idx,:] = point.positions
-            self.time_points[idx] = point.time_from_start.secs + point.time_from_start.nsecs*1e-9
-
-        print "numpy trajectory", self.trajectory
-
-
-        #TODO using this function garuntees that distance corresponds to time,
-        # I should probably use the time points provided by moveit.
-        # time_points will work with any list like structure. 1XN numpy array where
-        # N is the number of time points
-        print "self.time_points", self.time_points
+        self.trajectory, self.time_points = PIDController.process_traj_msg(traj)        
 
         # ---- Trajectory Setup ---- #
 
@@ -153,13 +151,15 @@ class PIDController(object):
 
         # keeps running time since beginning of path
         self.path_start_T = time.time()
-        rospy.loginfo("Loaded Trajectory")
+        rospy.loginfo("Loaded New Trajectory into Trajectory controller")
 
     def update(self, pos):
         """
         Return a control torque based on PID control
         """
         error = PIDController.shortest_angular_distance(self.target_pos, pos)
+        #rospy.loginfo_throttle(5,"Updating PID error: {}".format(self.controller))
+
         return -self.controller.update_PID(error)
 
     def joint_angles_callback(self, msg):
@@ -172,6 +172,7 @@ class PIDController(object):
             [msg.joint1, msg.joint2, msg.joint3, msg.joint4, msg.joint5,
              msg.joint6, msg.joint7]).reshape((7, 1))
 
+        rospy.loginfo_throttle(5, "current joint angles: {}".format(curr_pos))
         # convert to radians
         curr_pos = curr_pos * (np.pi / 180.0)
 
@@ -203,13 +204,9 @@ class PIDController(object):
 
         # check if the arm is at the start of the path to execute
         if not self.reached_start:
-            #
-            print "not reached start"
-            #print "curr_pos", curr_pos, "self.goal", self.goal
-
             dist_from_start = PIDController.shortest_angular_distance(curr_pos, self.start)
             dist_from_start = np.abs(dist_from_start) #TODO this waas fabs but my version of numpy doeesnt have fabs
-            print dist_from_start, "distance from start"
+            rospy.loginfo_throttle(1,"not reached start, current distance: {}".format(dist_from_start))
 
             # if all joints are close enough, robot is at start
             is_at_start = np.all(dist_from_start < START_EPSILON)
@@ -226,16 +223,19 @@ class PIDController(object):
                 self.path_start_T = time.time()
             else:
                 self.target_pos = self.start.reshape((7, 1))
+        
         else:
             t = time.time() - self.path_start_T
-
             self.target_pos = self.interpolate_trajectory(t)
 
             if not self.reached_goal:
                 #TODO add a timeout if the goal is taking too long
                 dist_from_goal = PIDController.shortest_angular_distance(curr_pos, self.goal)
+                rospy.loginfo_throttle(5, "Not reached goal current distance: {}".format(np.abs(dist_from_goal)))
+
                 is_at_goal = np.all(np.abs(dist_from_goal) < GOAL_EPSILON)
                 if is_at_goal:
+                    rospy.loginfo_throttle(5,"Setting reached goal to True")
                     self.reached_goal = True
 
     def interpolate_trajectory(self, time):
@@ -243,7 +243,7 @@ class PIDController(object):
             #if more than the trajectory time has passed, the target position is the final waypoint
             target_pos = self.trajectory[-1]
         else:
-            print time
+            print "current trajectory time",time
             #if time is not past the trajectory time, find the proper waypoint
             while self.time_points[self.target_index] < time:
                 self.target_index += 1

@@ -27,6 +27,7 @@ class RobotPlanner:
         self.scene = moveit_commander.PlanningSceneInterface()
         self.group = moveit_commander.MoveGroupCommander("arm")
 
+        #self.group.remem
         self.group.set_planner_id("RRTConnectkConfigDefault") 
         rospy.sleep(1)
         self.group.set_goal_tolerance(0.001)
@@ -260,51 +261,51 @@ def run_pick_place():
     grip_controller = GripController()
 
     #Get the ARTracker Pose
-    grasp_planner = ARTrackPlanner()
-    grasp_pose = grasp_planner.get_grasp_plan("cup")
+    #grasp_planner = ARTrackPlanner()
+    #grasp_pose = grasp_planner.get_grasp_plan("cup")
 
     #home grip location
     robot_planner.plan("home_grip")
     grip_controller.grip("percent",[0,0,0])
-    raw_input("plan to home_grip commplete, anykey and enter to execute")
+    #raw_input("plan to home_grip commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #pre grip location
     robot_planner.plan("grasp_pre_hardcode")
-    raw_input("plan to grasp_pre_hardcode commplete, anykey and enter to execute")
+    #raw_input("plan to grasp_pre_hardcode commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #grip location
     robot_planner.plan("grasp_hardcode")
-    raw_input("plan to grasp_hardcode commplete, anykey and enter to execute")
+    #raw_input("plan to grasp_hardcode commplete, anykey and enter to execute")
     robot_planner.execute()
     
     #grip object
-    raw_input("grip object? anykey to execute")
+    #raw_input("grip object? anykey to execute")
     grip_controller.grip("percent",[75,75,75])
     
     #target pre
     robot_planner.plan("grasp_target_pre")
-    raw_input("plan to grasp_target_pre commplete, anykey and enter to execute")
+    #raw_input("plan to grasp_target_pre commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #target location
     robot_planner.plan("grasp_target")
-    raw_input("plan to grasp_target commplete, anykey and enter to execute")
+    #raw_input("plan to grasp_target commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #release object
-    raw_input("release object? anykey to execute")
+    #raw_input("release object? anykey to execute")
     grip_controller.grip("percent",[0,0,0])
-
+    rospy.sleep(1)
     #go bak to pre grip location
-    robot_planner.plan("grasp_target_after")
-    raw_input("plan to back to grasp_pre_hardcode commplete, anykey and enter to execute")
-    robot_planner.execute()
+    #robot_planner.plan("grasp_pre_hardcode")
+    #raw_input("plan to back to grasp_pre_hardcode commplete, anykey and enter to execute")
+    #robot_planner.execute()
 
     #home grip location
     robot_planner.plan("home_grip")
-    raw_input("plan to home_grip commplete, anykey and enter to execute")
+    #raw_input("plan to home_grip commplete, anykey and enter to execute")
     robot_planner.execute()
 
 
@@ -317,14 +318,18 @@ def test_plan_waypoints():
     rrt_error = []
     for i in range(5):
         #home grip location
-        downstream, rrt = move_to_position("pos_1", robot_planner)
-        downstream_error.append(downstream)
-        rrt_error.append(rrt)
+        try:
+            downstream, rrt = move_to_position("pos_1", robot_planner)
+            downstream_error.append(downstream)
+            rrt_error.append(rrt)
 
-        #pre grip location
-        downstream, rrt = move_to_position("pos_2", robot_planner)
-        downstream_error.append(downstream)
-        rrt_error.append(rrt)
+            #pre grip location
+            downstream, rrt = move_to_position("pos_2", robot_planner)
+            downstream_error.append(downstream)
+            rrt_error.append(rrt)
+        except rospy.ROSInterruptException, e:
+            print e
+            break
     print "\n********RRT Error*********\n", rrt_error
     print "\n*******DOWNSTREAM*********\n", downstream_error
 
@@ -332,7 +337,11 @@ def move_to_position(position_name, robot_planner):
     #home grip location
     pose_request, pose_final_plan = robot_planner.plan(position_name)
 
-    raw_input("plan to {} commplete, anykey and enter to execute".format(position_name))
+    raw_data = raw_input("plan to {} commplete, anykey and enter to execute, q to exit".format(position_name))
+    if raw_data == 'q':
+        raise ValueError("shutdown requested mid test")
+        return
+
     robot_planner.execute()
     rospy.sleep(2)
     
@@ -358,4 +367,5 @@ if __name__ == '__main__':
     rospy.init_node('moveit_interface',
                         anonymous=True)
 
+    #run_pick_place()
     test_plan_waypoints()
