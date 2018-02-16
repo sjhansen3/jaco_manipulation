@@ -54,7 +54,12 @@ A ros independent way to check kinect drivers is by running
 
 
 ## Run pick and place demo
-`rosrun jaco_manipulation moveit_interface.py`
+`rosrun jaco_manipulation moveit_interface.py /joint_states:=/j2s7s300_driver/out/joint_state`
+Requires the following to be loaded:
+* AR Trackers
+* MoveIt!
+* Bringup
+
 #TODO test if this works in sim
 
 ## Dependencies
