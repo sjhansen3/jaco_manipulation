@@ -4,6 +4,23 @@ import geometry_msgs.msg
 import copy
 import os
 import rospkg
+import tf
+import rospy #TODO ultimately seperate ros from pose representations
+
+import random
+import visualization_msgs.msg
+
+def qv_mult(q1, v1):
+    """ rotate vector v1 by quaternion q1 
+    """
+    print "QV mult q1: {},type {} v1: {}, type {}".format(q1, type(q1), v1, type(v1))
+    v1 = tf.transformations.unit_vector(v1)
+    q2 = list(v1)
+    q2.append(0.0)
+    return tf.transformations.quaternion_multiply(
+        tf.transformations.quaternion_multiply(q1, q2), 
+        tf.transformations.quaternion_conjugate(q1)
+    )[:3]
 
 class Quaternion:
     def __init__(self, orientation, enforce_norm=True):
@@ -95,7 +112,7 @@ class Quaternion:
 class Pose:
     """ class for maintaining pose of an object in space
     """
-    def __init__(self, position, orientation, frame="unspecified"):
+    def __init__(self, position, orientation, frame="unspecified", publishable = True):
         if isinstance(orientation, Quaternion):
             o = orientation
         else:
@@ -107,8 +124,14 @@ class Pose:
         self._point = p
         self._orientation = o
     
-    @property
+        if publishable:
+            self.marker_pub = rospy.Publisher('/visualization_marker', visualization_msgs.msg.Marker, queue_size=10)
+
+    
+    @property #TODO maybe this shouldn't be a property?
     def ros_message(self):
+        """ converts the pose into a :geometry_msgs.msg.pose: object
+        """
         point = geometry_msgs.msg.Point()
         point.x = self._point.x
         point.y = self._point.y
@@ -155,6 +178,54 @@ class Pose:
         position = np.load(pose_folder_path+pose_name+"_position.npy")
         orientation = np.load(pose_folder_path+pose_name+"_orientation.npy")
         return Pose(position, orientation)
+
+    def show_position_marker(self, label = None, ident = 1, scale = (0.05,0.05,0.05), color = (random.random(),random.random(),random.random())):
+        """ Displays a marker at the position of the pose. #TODO a tf probably makes more sense here.
+        Keyword Params
+        ---
+        label: a text label for the marker :string:
+        ident: The identity of the marker, markers of the same identity will write over each other :int:
+        scale: The size of the marker in meters :3 tuple of floats:
+        color: The color of the marker, default is random :3 tuple of floats:
+        """
+        waypoint_marker = visualization_msgs.msg.Marker()
+        waypoint_marker.header.frame_id = '/root'
+        waypoint_marker.header.stamp = rospy.get_rostime()
+        waypoint_marker.ns = '/waypoint'
+        waypoint_marker.id = ident
+        waypoint_marker.type = visualization_msgs.msg.Marker.SPHERE
+    
+        waypoint_marker.pose = self.ros_message
+    
+        waypoint_marker.scale.x = scale[0]
+        waypoint_marker.scale.y = scale[1]
+        waypoint_marker.scale.z = scale[2]
+
+        waypoint_marker.color.r = color[0]
+        waypoint_marker.color.g = color[1]
+        waypoint_marker.color.b = color[2]
+        waypoint_marker.color.a = 0.50
+        waypoint_marker.lifetime = rospy.Duration(0)
+        for i in range(3):
+           self.marker_pub.publish(waypoint_marker)
+           rospy.sleep(0.2)
+
+        if label:
+            text_marker = visualization_msgs.msg.Marker()
+            text_marker.header.frame_id = '/root'
+            text_marker.header.stamp = rospy.get_rostime()
+            text_marker.ns = '/waypoint/text'
+            text_marker.id = ident
+            text_marker.type = visualization_msgs.msg.Marker.TEXT_VIEW_FACING
+            text_marker.pose = self.ros_message
+            text_marker.scale.z = 0.05
+            text_marker.color.r = color[0]
+            text_marker.color.g = color[1]
+            text_marker.color.b = color[2]
+            text_marker.color.a = 0.50
+            text_marker.text = label
+            text_marker.lifetime = rospy.Duration(0)
+            self.marker_pub.publish(text_marker)
 
     @property
     def orientation(self):

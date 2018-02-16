@@ -177,6 +177,9 @@ class RobotPlanner:
 
 
 class GripController:
+    """ A wrapper to send commands to the robot hand.
+    The kinova hand uses an action server for grip actions.
+    """
     def __init__(self):
         self.finger_maxDist = 18.9/2/1000  # max distance for one finger
         self.finger_maxTurn = 6800  # max thread rotation for one finger
@@ -258,13 +261,15 @@ class GripController:
         return finger_turn_, finger_meter_, finger_percent_
 
 def dynamic_pick_place():
+    """ A somewhat ugly function which runs pick and place using the AR trackers
+    """
     rospy.sleep(2)
     robot_planner = RobotPlanner()
     grip_controller = GripController()
 
     #get the ARTracker Pose
     grasp_planner = ARTrackPlanner()
-    grasp_pose = grasp_planner.get_grasp_plan("cup")
+    pregrasp_pose, grasp_pose = grasp_planner.get_grasp_plan("cup")
 
     #home grip location
     robot_planner.plan("home_grip")
@@ -273,9 +278,9 @@ def dynamic_pick_place():
     robot_planner.execute()
 
     #pre grip location
-    #robot_planner.plan("grasp_pre_hardcode")
-    #raw_input("plan to grasp_pre_hardcode commplete, anykey and enter to execute")
-    #robot_planner.execute()
+    robot_planner.plan(pregrasp_pose)
+    raw_input("plan to grasp_pre_hardcode commplete, anykey and enter to execute")
+    robot_planner.execute()
 
     #grip location
     robot_planner.plan(grasp_pose)
@@ -309,60 +314,6 @@ def dynamic_pick_place():
     robot_planner.plan("home_grip")
     #raw_input("plan to home_grip commplete, anykey and enter to execute")
     robot_planner.execute()
-
-def run_pick_place():
-    rospy.sleep(2)
-    robot_planner = RobotPlanner()
-    grip_controller = GripController()
-
-    #Get the ARTracker Pose
-    #grasp_planner = ARTrackPlanner()
-    #grasp_pose = grasp_planner.get_grasp_plan("cup")
-
-    #home grip location
-    robot_planner.plan("home_grip")
-    grip_controller.grip("percent",[0,0,0])
-    #raw_input("plan to home_grip commplete, anykey and enter to execute")
-    robot_planner.execute()
-
-    #pre grip location
-    robot_planner.plan("grasp_pre_hardcode")
-    #raw_input("plan to grasp_pre_hardcode commplete, anykey and enter to execute")
-    robot_planner.execute()
-
-    #grip location
-    robot_planner.plan("grasp_hardcode")
-    #raw_input("plan to grasp_hardcode commplete, anykey and enter to execute")
-    robot_planner.execute()
-    
-    #grip object
-    #raw_input("grip object? anykey to execute")
-    grip_controller.grip("percent",[75,75,75])
-    
-    #target pre
-    robot_planner.plan("grasp_target_pre")
-    #raw_input("plan to grasp_target_pre commplete, anykey and enter to execute")
-    robot_planner.execute()
-
-    #target location
-    robot_planner.plan("grasp_target")
-    #raw_input("plan to grasp_target commplete, anykey and enter to execute")
-    robot_planner.execute()
-
-    #release object
-    #raw_input("release object? anykey to execute")
-    grip_controller.grip("percent",[0,0,0])
-    rospy.sleep(1)
-    #go bak to pre grip location
-    #robot_planner.plan("grasp_pre_hardcode")
-    #raw_input("plan to back to grasp_pre_hardcode commplete, anykey and enter to execute")
-    #robot_planner.execute()
-
-    #home grip location
-    robot_planner.plan("home_grip")
-    #raw_input("plan to home_grip commplete, anykey and enter to execute")
-    robot_planner.execute()
-
 
 def test_plan_waypoints():
     rospy.sleep(2)
@@ -422,6 +373,5 @@ if __name__ == '__main__':
     rospy.init_node('moveit_interface',
                         anonymous=True)
 
-    run_pick_place()
-    #dynamic_pick_place()
+    dynamic_pick_place()
     #test_plan_waypoints()

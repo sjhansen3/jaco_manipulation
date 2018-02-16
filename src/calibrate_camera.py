@@ -41,6 +41,7 @@ class Calibrator:
         try:
             #Providing rospy.Time(0) will just get us the latest available transform
             if self.calibration_counter<20:
+                rospy.loginfo("Calibrating kinect {}".format(self.calibration_counter))
                 ar_frame = "/ar_marker_{}".format(markernumber)
                 kinect_frame = "/kinect2_rgb_optical_frame"
 
