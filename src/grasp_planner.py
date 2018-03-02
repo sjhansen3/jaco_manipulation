@@ -23,7 +23,8 @@ class ARTrackPlanner(GraspPlanner):
     """
     def __init__(self):
         GraspPlanner.__init__(self)
-        self.object_to_marker_num = {"cup": 8, "spoon":99}
+        #self.object_to_marker_num = {"cup": 8,"target": 2)}
+        self.object_dict = {"cup": (8,-0.02),"target": (2,0.07)} #(marker number, z offset)
 
     def get_grasp_plan(self, object_name, marker_num = None):
         """ The grasp plan for the AR tracker is simply based on a fixed offset for each object
@@ -36,11 +37,11 @@ class ARTrackPlanner(GraspPlanner):
         ---
         A tuple containing pregrasp pose and grasp pose
         """
-        if object_name not in self.object_to_marker_num and not marker_num:
+        if object_name not in self.object_dict and not marker_num:
             raise ValueError("no marker assigned for marker {}".format(object_name))
         if marker_num:
-            self.object_to_marker_num[object_name] = marker_num
-        ar_frame = "/ar_marker_{}".format(self.object_to_marker_num[object_name])
+            self.object_dict[object_name][0] = marker_num
+        ar_frame = "/ar_marker_{}".format(self.object_dict[object_name][0])
         world_frame = "/world"
 
         self.listener.waitForTransform(ar_frame, world_frame, rospy.Time(0), rospy.Duration(4.0))
@@ -56,7 +57,8 @@ class ARTrackPlanner(GraspPlanner):
         rospy.loginfo("AR tracker translation: {}, rotation: {}".format(trans, rot))
         rospy.loginfo("Hardcoded pose {}".format(hard_code_pose))
 
-        cup_position = np.asarray([trans[0], trans[1], hard_code_pose.position.z])
+        cup_position = np.asarray([trans[0], trans[1], trans[2] + self.object_dict[object_name][1]])
+        #cup_position = np.asarray([trans[0], trans[1], (hard_code_pose.position.z+self.object_dict[object_name][1])])
 
         grasp_pose = Pose(cup_position, hard_code_pose.orientation)
         rospy.loginfo("found tracker positon {}".format(grasp_pose))

@@ -18,6 +18,7 @@ from spacial_location import Pose
 import numpy as np
 from grasp_planner import ARTrackPlanner
 
+
 class RobotPlanner:
     #TODO consider renaming this - it has expanded beyond a planner
     def __init__(self):
@@ -32,7 +33,7 @@ class RobotPlanner:
         self.group.set_goal_tolerance(0.001)
 
         self.group.allow_replanning(True)
-        
+        self.group.set_num_planning_attempts(20)
 
         self.add_scene_items()
         self.solved_plan = None
@@ -104,6 +105,28 @@ class RobotPlanner:
         self.group.clear_pose_targets()
         
         self.group.set_pose_target(pose.ros_message)
+
+        #debugging ik
+        '''
+        p = geometry_msgs.msg.PoseStamped()
+        p.header.frame_id = "world"
+        p.pose = pose.ros_message
+        rospy.loginfo("pose.ros_message: {}".format(p))
+        ik_config = self.ik(p)
+        rospy.loginfo("IK Config: {}".format(ik_config))
+        joints = list(ik_config.solution.joint_state.position[0:7])
+
+        current_joints = self.group.get_current_joint_values()
+        rospy.loginfo("current joints: {}".format(current_joints))
+        rospy.loginfo("set joing arguments: {}".format(joints))
+
+        header = std_msgs.msg.Header()
+        robot_state = moveit_msgs.msg.RobotState()
+        robot_state.joint_state.name = ['j2s7s300_joint_{}'.format(i) for i in range(1,8)]
+        robot_state.joint_state.position = joints
+        self.group.set_joint_value_target(robot_state.joint_state)
+        '''
+
         rospy.loginfo("Planning to {}".format(pose))
         self.group.set_start_state_to_current_state()
         rospy.sleep(1)
@@ -129,19 +152,19 @@ class RobotPlanner:
         return self.compute_fk(header, links, robot_state)
 
     
-    # def ik(self, pose_stamped, group_name='arm'):
-    #     """ Computes the inverse kinematics """
-    #     req = PositionIKRequest()
-    #     req.group_name = group_name
-    #     req.pose_stamped = pose_stamped
-    #     req.timeout.secs = 0.1
-    #     req.avoid_collisions = False
+    def ik(self, pose_stamped, group_name='arm'):
+        """ Computes the inverse kinematics """
+        req = moveit_msgs.msg.PositionIKRequest()
+        req.group_name = group_name
+        req.pose_stamped = pose_stamped
+        req.timeout.secs = 0.1
+        req.avoid_collisions = False
 
-    #     try:
-    #         res = self.compute_ik(req)
-    #         return res
-    #     except rospy.ServiceException, e:
-    #         print("IK service call failed: {}".format(e))
+        try:
+            res = self.compute_ik(req)
+            return res
+        except rospy.ServiceException, e:
+            print("IK service call failed: {}".format(e))
 
     #TODO add waypoint planning for pregrasp -> grasp
     def plan_waypoints(self, waypoints):
@@ -260,7 +283,7 @@ class GripController:
 
         return finger_turn_, finger_meter_, finger_percent_
 
-def dynamic_pick_place():
+def dynamic_pick_place(object_name, target_name):
     """ A somewhat ugly function which runs pick and place using the AR trackers
     """
     rospy.sleep(2)
@@ -269,7 +292,9 @@ def dynamic_pick_place():
 
     #get the ARTracker Pose
     grasp_planner = ARTrackPlanner()
-    pregrasp_pose, grasp_pose = grasp_planner.get_grasp_plan("cup")
+    pregrasp_pose, grasp_pose = grasp_planner.get_grasp_plan(object_name)
+    #pretarget_pose, target_pose = grasp_planner.get_grasp_plan(object_name)
+    pretarget_pose, target_pose = grasp_planner.get_grasp_plan(target_name)
 
     #home grip location
     robot_planner.plan("home_grip")
@@ -278,6 +303,8 @@ def dynamic_pick_place():
     robot_planner.execute()
 
     #pre grip location
+    rospy.loginfo("pregrasp_pose is: {}".format(pregrasp_pose))
+    rospy.loginfo("grasp_pose is: {}".format(grasp_pose))
     robot_planner.plan(pregrasp_pose)
     raw_input("plan to grasp_pre_hardcode commplete, anykey and enter to execute")
     robot_planner.execute()
@@ -288,17 +315,17 @@ def dynamic_pick_place():
     robot_planner.execute()
     
     #grip object
-    #raw_input("grip object? anykey to execute")
+    raw_input("grip object? anykey to execute")
     grip_controller.grip("percent",[75,75,75])
     
     #target pre
-    robot_planner.plan("grasp_target_pre")
-    #raw_input("plan to grasp_target_pre commplete, anykey and enter to execute")
+    robot_planner.plan(pretarget_pose)
+    raw_input("plan to grasp_target_pre commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #target location
-    robot_planner.plan("grasp_target")
-    #raw_input("plan to grasp_target commplete, anykey and enter to execute")
+    robot_planner.plan(target_pose)
+    raw_input("plan to grasp_target commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #release object
@@ -312,7 +339,7 @@ def dynamic_pick_place():
 
     #home grip location
     robot_planner.plan("home_grip")
-    #raw_input("plan to home_grip commplete, anykey and enter to execute")
+    raw_input("plan to home_grip commplete, anykey and enter to execute")
     robot_planner.execute()
 
 def test_plan_waypoints():
@@ -373,5 +400,5 @@ if __name__ == '__main__':
     rospy.init_node('moveit_interface',
                         anonymous=True)
 
-    dynamic_pick_place()
+    dynamic_pick_place("cup", "target")
     #test_plan_waypoints()
