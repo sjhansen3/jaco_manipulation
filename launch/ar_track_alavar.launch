@@ -6,10 +6,10 @@
 
 	<!--Change this topic to use depth data -->
 	
-	<arg name="cam_image_topic" default="/kinect2/hd/image_color" />
+	<arg name="cam_image_topic" default="/zed/rgb/image_rect_color" />
 
-	<arg name="cam_info_topic" default="/kinect2/hd/camera_info" />
-	<arg name="output_frame" default="/kinect2_rgb_optical_frame" />
+	<arg name="cam_info_topic" default="/zed/rgb/camera_info" />
+	<arg name="output_frame" default="/zed_center" />
 
 	<!-- launch alvar AR tag tracker, change to individualMarkers if you want to take advantage of kinect data-->
 	<node name="ar_track_alvar" pkg="ar_track_alvar" type="individualMarkersNoKinect" respawn="false" output="screen">
@@ -22,11 +22,11 @@
 		<remap from="camera_info"   to="$(arg cam_info_topic)" />
 	</node>
 
-	<!-- Launch kinect bridge -->
-	<node name="kinect2_bridge" pkg="kinect2_bridge" type="kinect2_bridge">
+	<!-- Launch zed bridge -->
+	<!-- <node name="kinect2_bridge" pkg="kinect2_bridge" type="kinect2_bridge">
 		<param name="depth_method" value="opengl"/>
 		<param name="reg_method" value="cpu"/>
-	</node>
+	</node> -->
 
 	<!-- run calibration using ar_marker_6 for the kinect and publish static transform -->
 	<node name="calibrate_camera" pkg="jaco_manipulation" type="calibrate_camera.py">
