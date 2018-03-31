@@ -5,11 +5,10 @@
 	<arg name="max_track_error" default="0.2" />
 
 	<!--Change this topic to use depth data -->
-	
-	<arg name="cam_image_topic" default="/zed/rgb/image_rect_color" />
+	<arg name="cam_image_topic" default="/kinect2/hd/image_color" />
 
-	<arg name="cam_info_topic" default="/zed/rgb/camera_info" />
-	<arg name="output_frame" default="/zed_center" />
+	<arg name="cam_info_topic" default="/kinect2/hd/camera_info" />
+	<arg name="output_frame" default="/kinect2_rgb_optical_frame" />
 
 	<!-- launch alvar AR tag tracker, change to individualMarkers if you want to take advantage of kinect data-->
 	<node name="ar_track_alvar" pkg="ar_track_alvar" type="individualMarkersNoKinect" respawn="false" output="screen">
@@ -22,14 +21,17 @@
 		<remap from="camera_info"   to="$(arg cam_info_topic)" />
 	</node>
 
-	<!-- Launch zed bridge -->
-	<!-- <node name="kinect2_bridge" pkg="kinect2_bridge" type="kinect2_bridge">
-		<param name="depth_method" value="opengl"/>
-		<param name="reg_method" value="cpu"/>
-	</node> -->
+
+	<!-- Load the URDF, SRDF and other .yaml configuration files on the param server -->
+	<include file="$(find kinect2_bridge)/launch/kinect2_bridge.launch">
+	</include>
 
 	<!-- run calibration using ar_marker_6 for the kinect and publish static transform -->
 	<node name="calibrate_camera" pkg="jaco_manipulation" type="calibrate_camera.py">
 	</node>
 
 </launch>
+<!-- 
+[ERROR] [1522527325.384506968]: Client 
+[/ar_track_alvar] wants topic /kinect2/hd/image_depth_rect to have datatype/md5sum [sensor_msgs/PointCloud2/1158d486dd51d683ce2f1be655c3c181], 
+but our version has [sensor_msgs/Image/060021388200f6f0f447d0fcd9c64743]. Dropping connection. -->
