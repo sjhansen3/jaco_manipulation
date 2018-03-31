@@ -27,7 +27,6 @@ class Calibrator:
     def send_static_transform(self):
         """Broadcast the transformation between /world and the kinect
         """
-
         self.br.sendTransform(self.trans, self.orientation, rospy.Time.now(), "/kinect2_rgb_optical_frame", "/world" )
     
     def get_static_transform(self):

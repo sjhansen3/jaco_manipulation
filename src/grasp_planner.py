@@ -43,39 +43,43 @@ class GraspPlanner:
 class GQCNNPlanner(GraspPlanner):
     """ pass an image to the GQCNN
     """
-    def __init__(self, camera, config):
+    def __init__(self, camera_intrinsics, config):
         # wait for Grasp Planning Service and create Service Proxy
         rospy.loginfo("Waiting for GQCNN to spin up")
         rospy.wait_for_service('plan_gqcnn_grasp')
         self.plan_grasp = rospy.ServiceProxy('plan_gqcnn_grasp', GQCNNGraspPlanner)
         rospy.loginfo("GQCNN service Initialized")
 
-        self.camera = camera
         self.config = config
-        frame = config['sensor_cfg']['frame']
         # get camera intrinsics
-        self.camera_intrinsics = CameraIntrinsics(frame, fx=1, fy=1, cx=0.0, cy=0.0, skew=0.0, height=720, width=1280) #TODO set height and width with param
-        
-    def get_bounding_box(self, object_name):
+        self.camera_intrinsics = camera_intrinsics
+
+    def _bbox_to_msg(self, bbox):
+        """
+        Params
+        ---
+        bbox: numpy array [minX, minY, maxX, maxY] in pixels around the image 
+        Returns
+        ---
+        a bondingBox message type
+        """       
         boundingBox = BoundingBox()
-        boundingBox.minY = 0
-        boundingBox.minX = 0
-        boundingBox.maxY = 1280
-        boundingBox.maxX = 720
+        boundingBox.minX = bbox[0]
+        boundingBox.minY = bbox[1]
+        boundingBox.maxX = bbox[2]
+        boundingBox.maxY = bbox[3]
         return boundingBox
 
-    def get_grasp_plan(self, object_name):
-        boundingBox = self.get_bounding_box(object_name)
-        
+    def get_grasp_plan(self, bounding_box, color_image, depth_image):
+        """ finds the highest quality score grasp associated with the object
+
+        """
         #grab frames for depth image and color image
         rospy.loginfo("grabbing frames")
-        color_image, depth_image, _ = self.camera.frames()
 
-
-        print("Is the original depth image finite?", np.all(np.isfinite(depth_image.data)))
+        boundingBox = self._bbox_to_msg(bounding_box)
         
         pyplot.figure()
-
         pyplot.subplot(2,3,1)
         pyplot.title("color image")
         pyplot.imshow(color_image.data)
@@ -88,15 +92,9 @@ class GQCNNPlanner(GraspPlanner):
         pyplot.title("non finite locations on the image")
         pyplot.imshow(np.isfinite(depth_image.data))
 
-
-        # max_xy_coords = np.array([720, 1280])
-        # min_xy_coords = np.array([0, 0])
-        # bbox = Box(min_xy_coords, max_xy_coords)
-        # pyplot.box(bbox)
-
         # inpaint to remove holes
-        inpainted_color_image = color_image.inpaint(rescale_factor=0.5) #TODO make rescale factor in config
-        inpainted_depth_image = depth_image.inpaint(rescale_factor=0.5)
+        inpainted_color_image = color_image.inpaint(self.config["inpaint_rescale_factor"]) #TODO make rescale factor in config
+        inpainted_depth_image = depth_image.inpaint(self.config["inpaint_rescale_factor"])
         print("Is the inpainted depth image finite?", np.all(np.isfinite(inpainted_depth_image.data)))
 
 
@@ -109,11 +107,22 @@ class GQCNNPlanner(GraspPlanner):
         pyplot.imshow(inpainted_depth_image.data)
         pyplot.show()
         
-
         try:
             rospy.loginfo("Sending grasp plan")
             planned_grasp_data = self.plan_grasp(inpainted_color_image.rosmsg, inpainted_depth_image.rosmsg, self.camera_intrinsics.rosmsg, boundingBox)
             rospy.loginfo("grasp plan complete")
+
+            grasp = planned_grasp_data.grasp
+            rospy.loginfo('Processing Grasp')
+
+            rotation_quaternion = np.asarray([grasp.pose.orientation.w, grasp.pose.orientation.x, grasp.pose.orientation.y, grasp.pose.orientation.z]) 
+            translation = np.asarray([grasp.pose.position.x, grasp.pose.position.y, grasp.pose.position.z])
+            
+            grasp_pose = Pose(translation, rotation_quaternion)
+            rospy.loginfo("found tracker positon {}".format(grasp_pose))
+
+            pre_grasp_pose = offset_hand(grasp_pose, offset_dist=0.1)
+            return pre_grasp_pose, grasp_pose
 
             print planned_grasp_data
             # lift_gripper_width, T_gripper_world = process_GQCNNGrasp(planned_grasp_data, robot, left_arm, right_arm, subscriber, home_pose, config)
@@ -165,31 +174,31 @@ class ARTrackPlanner(GraspPlanner):
         grasp_pose = Pose(cup_position, hard_code_pose.orientation)
         rospy.loginfo("found tracker positon {}".format(grasp_pose))
 
-        pre_grasp_pose = self._offset_hand(grasp_pose, offset_dist=0.1)
+        pre_grasp_pose = offset_hand(grasp_pose, offset_dist=0.1)
         return pre_grasp_pose, grasp_pose
 
-    def _offset_hand(self, grasp_pose, offset_dist=0.1):
-        """ Find the pre grasp pose by offsetting the hand backwards from its current position
-        grasp_pose: the pose of the grasp location
-        offset_dist: the amount to offset off the object
-        Returns
-        ---
-        pre_grasp_pose: the offsetted pose of the object
-        """
-        #use the unit z vector because thats the direction out of the hand
-        unit_z_vector = np.asarray([0,0,1])
-        direction = spacial_location.qv_mult(grasp_pose.orientation[0:4], unit_z_vector)
-        #print "direction", direction
-        print "grasp_pose.position: ", grasp_pose.position
+def offset_hand(grasp_pose, offset_dist=0.1):
+    """ Find the pre grasp pose by offsetting the hand backwards from its current position
+    grasp_pose: the pose of the grasp location
+    offset_dist: the amount to offset off the object
+    Returns
+    ---
+    pre_grasp_pose: the offsetted pose of the object
+    """
+    #use the unit z vector because thats the direction out of the hand
+    unit_z_vector = np.asarray([0,0,1])
+    direction = spacial_location.qv_mult(grasp_pose.orientation[0:4], unit_z_vector)
+    #print "direction", direction
+    print "grasp_pose.position: ", grasp_pose.position
 
-        grasp_pose.show_position_marker(ident = 1, label = "grasp pose")
+    grasp_pose.show_position_marker(ident = 1, label = "grasp pose")
 
-        pre_grasp_position = grasp_pose.position - direction*offset_dist
+    pre_grasp_position = grasp_pose.position - direction*offset_dist
 
-        pre_grasp_pose = Pose(pre_grasp_position, grasp_pose.orientation)
-        pre_grasp_pose.show_position_marker(ident = 2, label = "pregrasp pose")
+    pre_grasp_pose = Pose(pre_grasp_position, grasp_pose.orientation)
+    pre_grasp_pose.show_position_marker(ident = 2, label = "pregrasp pose")
 
-        return pre_grasp_pose
+    return pre_grasp_pose
 
 def test_offset_hand():
     rospy.sleep(5)

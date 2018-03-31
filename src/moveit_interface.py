@@ -268,7 +268,7 @@ def dynamic_pick_place():
     grip_controller = GripController()
 
     #get the ARTracker Pose
-    grasp_planner = ARTrackPlanner()
+    grasp_planner = GQCNNPlanner()
     pregrasp_pose, grasp_pose = grasp_planner.get_grasp_plan("cup")
 
     #home grip location
