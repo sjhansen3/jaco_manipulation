@@ -4,7 +4,6 @@ sensor_cfg:
     depth_topic: "/kinect2/hd/image_depth_rect"
     frame: "kinect2_rgb_optical_frame"
     quality: "sd"
-    frame: "kinect2_rgb_optical_frame"
     auto_white_balance: 0
     flip_images: 1
     type: bridged_kinect2

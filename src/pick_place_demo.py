@@ -24,12 +24,12 @@ class PickPlaceDemo:
     def _plan_and_execute(self, location, pause_message=None):
         """ plan and execute a path to a location with optional paus message
         """
-        self.robot_planner.plan(location)
+        self.path_planner.plan(location)
         if pause_message:
             data = raw_input(pause_message)
             if data == 'q':
                 return False
-        return self.robot_planner.execute()
+        return self.path_planner.execute()
 
     def _get_bounding_box(self, object_name, color_image):
         """ Find the bounding box for the object
@@ -43,7 +43,8 @@ class PickPlaceDemo:
         bounding_box: numpy array [minX, minY, maxX, maxY] in pixels around the image 
         on the depth image
         """
-        return np.array([500,500,1000,800])
+        return np.array([120,120,280,280]) 
+        #return np.array([500,500,1000,800])
 
     def move_object(self, object_name):
         """ A somewhat ugly function which runs pick and place using the AR trackers
@@ -108,6 +109,7 @@ if __name__ == '__main__':
     frame = config['sensor_cfg']['frame']
 
     camera_intrinsics = camera.ir_intrinsics
+    #camera_intrinsics = perception.CameraIntrinsics(frame, fx=365.46, fy=365.46, cx=254.9, cy=205.4, skew=0.0, height=424, width=512) #TODO set height and width with param 
     grasp_planner = GQCNNPlanner(camera_intrinsics, config)
 
     path_planner = RobotPlanner()
