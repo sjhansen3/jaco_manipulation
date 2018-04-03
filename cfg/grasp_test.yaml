@@ -1,9 +1,13 @@
 # sensor config
 sensor_cfg:
-    frame: kinect_frame
+    color_topic: "/kinect2/hd/image_color"
+    depth_topic: "/kinect2/hd/image_depth_rect"
+    frame: "kinect2_rgb_optical_frame"
+    quality: "sd"
+    frame: "kinect2_rgb_optical_frame"
     auto_white_balance: 0
     flip_images: 1
-    type: kinect2
+    type: bridged_kinect2
     pipeline_mode: 1
     registration_mode: 1
     depth_mode: 0

@@ -13,22 +13,13 @@ import perception
 from sensor_msgs.msg import Image
 
 class PickPlaceDemo:
-    def __init__(self, grasp_planner, path_planner, grip_controller, config):
+    def __init__(self, grasp_planner, path_planner, grip_controller, camera, config):
         self.grasp_planner = grasp_planner
         self.path_planner = path_planner
         self.grip_controller = grip_controller
 
         self.config = config
-        self.image_sub = rospy.Subscriber(config["sensor_cfg"]["color_topic"], Image, self._cache_image)
-        self.depth_sub = rospy.Subscriber(config["sensor_cfg"]["depth_topic"], Image, self._cache_depth)
-    
-        rospy.loginfo("Waiting for camera color_topic: {} to come up".format(config["sensor_cfg"]["color_topic"]))
-        rospy.wait_for_message(config["sensor_cfg"]["color_topic"], Image)
-        
-        rospy.loginfo("Waiting for camera color_topic: {} to come up".format(config["sensor_cfg"]["depth_topic"]))
-        rospy.wait_for_message(config["sensor_cfg"]["depth_topic"], Image)
-
-        rospy.loginfo("Pick place demo initialized")
+        self.camera = camera
 
     def _plan_and_execute(self, location, pause_message=None):
         """ plan and execute a path to a location with optional paus message
@@ -39,29 +30,6 @@ class PickPlaceDemo:
             if data == 'q':
                 return False
         return self.robot_planner.execute()
-
-    def _cache_image(self, image_msg):
-        """ subscribe to image topic and keep it up to date
-        """
-        try:
-            color_image = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
-        except CvBridgeError as e:
-            rospy.logerr(e)
- 
-        color_arr = copy.deepcopy(np.array(color_image)) #TODO should this specify type as well?
-        self.color_image = ColorImage(color_arr[:,:,:3], self.image_frame)
- 
-    def _cache_depth(self, image_msg):
-        """ subscribe to depth image topic and keep it up to date
-        """
-        try:
-            cv_image = self.bridge.imgmsg_to_cv2(image_msg, "32FC1")
-        except CvBridgeError as e:
-            rospy.logerr(e)
- 
-        depth = copy.deepcopy(np.array(cv_image, np.float32))
-        depth[np.isinf(depth)] = 1000
-        self.depth_image = DepthImage(depth, self.image_frame)
 
     def _get_bounding_box(self, object_name, color_image):
         """ Find the bounding box for the object
@@ -75,16 +43,17 @@ class PickPlaceDemo:
         bounding_box: numpy array [minX, minY, maxX, maxY] in pixels around the image 
         on the depth image
         """
-        return np.array([120,120,280,280])
+        return np.array([500,500,1000,800])
 
     def move_object(self, object_name):
         """ A somewhat ugly function which runs pick and place using the AR trackers
         """
-        # color_image, depth_image, _ = self.camera.frames()
-        color_image = self.color_image
-        depth_image = self.depth_image
+        color_image, depth_image, _ = self.camera.frames()
         
         bounding_box = self._get_bounding_box(object_name, color_image)
+        print("trace starting")
+        # import pdb; pdb.set_trace()
+
         pregrasp_pose, grasp_pose = grasp_planner.get_grasp_plan(bounding_box, color_image, depth_image)
         
         self.grip_controller.grip("percent",[0,0,0])
@@ -125,8 +94,6 @@ if __name__ == '__main__':
     camera.start()
     rospy.loginfo('Sensor Running')
     
-    sensor = RgbdSensorFactory.sensor(sensor_type, sensor_cfg)
-
     # setup safe termination
     def handler(signum, frame):
         rospy.loginfo('caught CTRL+C, exiting...')        
@@ -140,14 +107,14 @@ if __name__ == '__main__':
 
     frame = config['sensor_cfg']['frame']
 
-    camera_intrinsics = perception.CameraIntrinsics(frame, fx=365.46, fy=365.46, cx=254.9, cy=205.4, skew=0.0, height=424, width=512) #TODO set height and width with param
+    camera_intrinsics = camera.ir_intrinsics
     grasp_planner = GQCNNPlanner(camera_intrinsics, config)
 
     path_planner = RobotPlanner()
     grip_controller = GripController()
     object_name = "cup"
 
-    picker = PickPlaceDemo(grasp_planner, path_planner, grip_controller, config)
+    picker = PickPlaceDemo(grasp_planner, path_planner, grip_controller, camera, config)
     picker.move_object(object_name)
 
     rospy.spin()
