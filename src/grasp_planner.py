@@ -53,7 +53,7 @@ class GQCNNPlanner(GraspPlanner):
         self.config = config
         # get camera intrinsics
         self.camera_intrinsics = camera_intrinsics
-
+        
     def _bbox_to_msg(self, bbox):
         """
         Params
