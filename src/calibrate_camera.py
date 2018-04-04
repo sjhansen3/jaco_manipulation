@@ -3,6 +3,7 @@
 import tf
 import rospy
 import numpy as np
+import signal
 
 class Calibrator:
     def __init__(self, trans, markernumber=6):
@@ -63,8 +64,14 @@ class Calibrator:
 if __name__ == '__main__':
     rospy.init_node('calibrate_camera')
     markernumber = 6
-    translation = [0, -0.062, -0.035] #trnslation of QR tracker in robot reference frame
+    translation = [-0.06, -0.072, -0.025] #trnslation of QR tracker in robot reference frame
     calibrator = Calibrator(translation, markernumber)
+
+    # setup safe termination
+    def handler(signum, frame):
+        rospy.loginfo('caught CTRL+C, exiting...')         
+        exit(0)
+    signal.signal(signal.SIGINT, handler)
 
     #rate = rospy.Rate(1.0)
     while not rospy.is_shutdown():
