@@ -131,23 +131,24 @@ class GQCNNPlanner(GraspPlanner):
         grasp_pose_stamped.header = header
 
         self.listener.waitForTransform("/world", self.camera_intrinsics.frame, rospy.Time(0), rospy.Duration(4.0))
-        flag = False
-        while not flag:
-            try:
-                grasp_pose_world_stamped = self.listener.transformPose("/world", grasp_pose_stamped)
-                flag = True
-            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                rospy.logerr("tf was not able to find a transformation between the world frame and the grasp point")
-                rospy.sleep(0.1)
+        try:
+            grasp_pose_world_stamped = self.listener.transformPose("/world", grasp_pose_stamped)
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            rospy.logerr("tf was not able to find a transformation between the world frame and the grasp point")
+            rospy.sleep(0.1)
 
         rospy.loginfo("The planned grasp was converted into the world frame: {}".format(grasp_pose_world_stamped))
 
         g_pos = grasp_pose_world_stamped.pose.position
-        g_quat = grasp_pose_stamped.pose.orientation
+        g_quat = grasp_pose_world_stamped.pose.orientation
 
         pos = np.array([g_pos.x, g_pos.y, g_pos.z])
         rot = np.array([g_quat.x, g_quat.y, g_quat.z, g_quat.w])
         grasp_pose_world = Pose(pos, rot, frame=self.camera_intrinsics.frame)
+    
+        #import pdb; pdb.set_trace()
+
+        rospy.loginfo("grasp_pose_world {}".format(grasp_pose_world))
 
         pre_grasp_pose = offset_hand(grasp_pose_world, offset_dist=0.1)
         return pre_grasp_pose, grasp_pose_world
@@ -199,7 +200,7 @@ class ARTrackPlanner(GraspPlanner):
         pre_grasp_pose = offset_hand(grasp_pose, offset_dist=0.1)
         return pre_grasp_pose, grasp_pose
 
-def offset_hand(grasp_pose, offset_dist=0.1):
+def offset_hand(pose_input, offset_dist=0.1):
     """ Find the pre grasp pose by offsetting the hand backwards from its current position
     grasp_pose: the pose of the grasp location
     offset_dist: the amount to offset off the object
@@ -209,15 +210,15 @@ def offset_hand(grasp_pose, offset_dist=0.1):
     """
     #use the unit z vector because thats the direction out of the hand
     unit_z_vector = np.asarray([0,0,1])
-    direction = spacial_location.qv_mult(grasp_pose.orientation[0:4], unit_z_vector)
-    #print "direction", direction
-    print "grasp_pose.position: ", grasp_pose.position
+    direction = spacial_location.qv_mult(pose_input.orientation[0:4], unit_z_vector)
 
-    grasp_pose.show_position_marker(ident = 1, label = "grasp pose")
+    print "grasp_pose.position: ", pose_input.position
 
-    pre_grasp_position = grasp_pose.position - direction*offset_dist
+    pose_input.show_position_marker(ident = 1, label = "grasp pose")
 
-    pre_grasp_pose = Pose(pre_grasp_position, grasp_pose.orientation)
+    pre_grasp_position = pose_input.position - direction*offset_dist
+
+    pre_grasp_pose = Pose(pre_grasp_position, pose_input.orientation)
     pre_grasp_pose.show_position_marker(ident = 2, label = "pregrasp pose")
     import pdb; pdb.set_trace()
 
