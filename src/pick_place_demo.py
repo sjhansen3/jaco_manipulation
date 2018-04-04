@@ -53,7 +53,6 @@ class PickPlaceDemo:
         
         bounding_box = self._get_bounding_box(object_name, color_image)
         print("trace starting")
-        # import pdb; pdb.set_trace()
 
         pregrasp_pose, grasp_pose = grasp_planner.get_grasp_plan(bounding_box, color_image, depth_image)
         

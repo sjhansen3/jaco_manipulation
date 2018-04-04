@@ -12,6 +12,7 @@ from std_msgs.msg import Header
 from gqcnn.srv import GQCNNGraspPlanner
 from gqcnn.msg import GQCNNGrasp, BoundingBox
 import geometry_msgs.msg
+import std_msgs.msg
 from sensor_msgs.msg import Image, CameraInfo
 
 from perception import CameraIntrinsics, ColorImage, DepthImage
@@ -53,7 +54,9 @@ class GQCNNPlanner(GraspPlanner):
         self.config = config
         # get camera intrinsics
         self.camera_intrinsics = camera_intrinsics
-        
+
+        self.listener = tf.TransformListener()
+
     def _bbox_to_msg(self, bbox):
         """
         Params
@@ -70,6 +73,7 @@ class GQCNNPlanner(GraspPlanner):
         boundingBox.maxY = bbox[3]
         return boundingBox
 
+
     def get_grasp_plan(self, bounding_box, color_image, depth_image):
         """ finds the highest quality score grasp associated with the object
 
@@ -80,56 +84,74 @@ class GQCNNPlanner(GraspPlanner):
         boundingBox = self._bbox_to_msg(bounding_box)
         
         pyplot.figure()
-        pyplot.subplot(2,3,1)
+        pyplot.subplot(2,2,1)
         pyplot.title("color image")
         pyplot.imshow(color_image.data)
 
-        pyplot.subplot(2,3,2)
+        pyplot.subplot(2,2,2)
         pyplot.title("depth image")
         pyplot.imshow(depth_image.data)
-
-        pyplot.subplot(2,3,3)
-        pyplot.title("non finite locations on the image")
-        pyplot.imshow(np.isfinite(depth_image.data))
 
         # inpaint to remove holes
         inpainted_color_image = color_image.inpaint(self.config["inpaint_rescale_factor"]) #TODO make rescale factor in config
         inpainted_depth_image = depth_image.inpaint(self.config["inpaint_rescale_factor"])
-        print("Is the inpainted depth image finite?", np.all(np.isfinite(inpainted_depth_image.data)))
 
-
-        pyplot.subplot(2,3,4)
+        pyplot.subplot(2,2,3)
         pyplot.title("inpaint color")
         pyplot.imshow(inpainted_color_image.data)
 
-        pyplot.subplot(2,3,5)
+        pyplot.subplot(2,2,4)
         pyplot.title("inpaint depth")
         pyplot.imshow(inpainted_depth_image.data)
         pyplot.show()
         
         try:
-            rospy.loginfo("Sending grasp plan")
+            rospy.loginfo("Sending grasp plan request to gqcnn server")
             planned_grasp_data = self.plan_grasp(inpainted_color_image.rosmsg, inpainted_depth_image.rosmsg, self.camera_intrinsics.rosmsg, boundingBox)
-            rospy.loginfo("grasp plan complete")
 
-            grasp = planned_grasp_data.grasp
-            rospy.loginfo('Processing Grasp')
+            planned_grasp_pose_msg = planned_grasp_data.grasp.pose
+            grasp_succes_prob = planned_grasp_data.grasp.grasp_success_prob
 
-            rotation_quaternion = np.asarray([grasp.pose.orientation.w, grasp.pose.orientation.x, grasp.pose.orientation.y, grasp.pose.orientation.z]) 
-            translation = np.asarray([grasp.pose.position.x, grasp.pose.position.y, grasp.pose.position.z])
-            
-            grasp_pose = Pose(translation, rotation_quaternion)
-            rospy.loginfo("found tracker positon {}".format(grasp_pose))
-
-            pre_grasp_pose = offset_hand(grasp_pose, offset_dist=0.1)
-            return pre_grasp_pose, grasp_pose
-
-            print planned_grasp_data
-            # lift_gripper_width, T_gripper_world = process_GQCNNGrasp(planned_grasp_data, robot, left_arm, right_arm, subscriber, home_pose, config)
+            rospy.loginfo("Grasp service request response: {}".format(planned_grasp_data))
 
         except rospy.ServiceException, e:
             rospy.logerr("Service call failed: \n %s" % e)  
-    
+
+        # rotation_quaternion = np.asarray([grasp.pose.orientation.w, grasp.pose.orientation.x, grasp.pose.orientation.y, grasp.pose.orientation.z]) 
+        # translation = np.asarray([grasp.pose.position.x, grasp.pose.position.y, grasp.pose.position.z])
+            
+        # grasp_pose = Pose(translation, rotation_quaternion, frame=self.camera_intrinsics.frame)
+        grasp_pose_stamped = geometry_msgs.msg.PoseStamped()
+
+        header = std_msgs.msg.Header()
+        header.frame_id = self.camera_intrinsics.frame
+        header.stamp = rospy.Time(0)
+
+        grasp_pose_stamped.pose = planned_grasp_pose_msg
+        grasp_pose_stamped.header = header
+
+        self.listener.waitForTransform("/world", self.camera_intrinsics.frame, rospy.Time(0), rospy.Duration(4.0))
+        flag = False
+        while not flag:
+            try:
+                grasp_pose_world_stamped = self.listener.transformPose("/world", grasp_pose_stamped)
+                flag = True
+            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                rospy.logerr("tf was not able to find a transformation between the world frame and the grasp point")
+                rospy.sleep(0.1)
+
+        rospy.loginfo("The planned grasp was converted into the world frame: {}".format(grasp_pose_world_stamped))
+
+        g_pos = grasp_pose_world_stamped.pose.position
+        g_quat = grasp_pose_stamped.pose.orientation
+
+        pos = np.array([g_pos.x, g_pos.y, g_pos.z])
+        rot = np.array([g_quat.x, g_quat.y, g_quat.z, g_quat.w])
+        grasp_pose_world = Pose(pos, rot, frame=self.camera_intrinsics.frame)
+
+        pre_grasp_pose = offset_hand(grasp_pose_world, offset_dist=0.1)
+        return pre_grasp_pose, grasp_pose_world
+
 class ARTrackPlanner(GraspPlanner):
     """ One small step above hard coding - uses AR trackers and a dictionary to find poses
     #TODO implement dictionary with pose offsets based on object type
@@ -197,6 +219,7 @@ def offset_hand(grasp_pose, offset_dist=0.1):
 
     pre_grasp_pose = Pose(pre_grasp_position, grasp_pose.orientation)
     pre_grasp_pose.show_position_marker(ident = 2, label = "pregrasp pose")
+    import pdb; pdb.set_trace()
 
     return pre_grasp_pose
 
