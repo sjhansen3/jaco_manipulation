@@ -3,7 +3,7 @@
 
 # Examples
 
-## Fake robot
+## Needed commands on the real t
 `roslaunch manipulation.launch`
 Which does does the following:
 #TODO needs testing: does the finger action server work in sim?
@@ -13,16 +13,12 @@ Which does does the following:
 3. **Robot state publisher** Given the published joint states, publish tf for the robot links
 4. **launch rviz** With manipulation_config.rviz as the coniguration file
 
-## load drivers and planner for real robot
+## How to run pick and place demo on real robot
 1. Launch the **kinova_driver** node to control the arm.
 
 `roslaunch kinova_bringup kinova_robot.launch kinova_robotType:=j2s7s300 /joint_states:=/j2s7s300_driver/out/joint_state`
 
-2. run **rviz** with manipulation.launch.
-
-`rosrun rviz rviz`
-
-3. Load extra drivers for fingers and **moveit**.
+2. Load extra drivers for fingers and **moveit**.
 
 `roslaunch j2s7s300_moveit_config j2s7s300_demo.launch /joint_states:=/j2s7s300_driver/out/joint_state`
 Which loads the following:
@@ -30,6 +26,15 @@ Which loads the following:
 * joint_trajectory_action_server node available in kinova_driver
 * gripper_command_action_server node available in kinova_driver
 * rviz
+
+3. Run the gqcnn server
+`roslaunch gqcnn gqcnn.launch`
+
+4. Connect to the kinect
+`roslaunch jaco_manipulation ar_track_alavar.launch`
+
+3. Run the pickplace demo
+`rosrun jaco_manipulation pick_place_demo.py`
 
 ## Command line tool for saving poses
 
