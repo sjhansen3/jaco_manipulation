@@ -151,59 +151,20 @@ class GQCNNPlanner(GraspPlanner):
 
         rotation_quaternion = np.asarray([grasp.pose.orientation.w, grasp.pose.orientation.x, grasp.pose.orientation.y, grasp.pose.orientation.z]) 
         translation = np.asarray([grasp.pose.position.x, grasp.pose.position.y, grasp.pose.position.z])
-        T_grasp_camera = RigidTransform(rotation_quaternion, translation, "grasp_point_test", self.camera_intrinsics.frame)
-        # T_grasp_camera.publish_to_ros()
-        # T_world_camera = RigidTransform.rigid_transform_from_ros(self.camera_intrinsics.frame, "world")
-        T_world_camera = self._get_transformation(self.camera_intrinsics.frame)
+        T_grasp_camera = RigidTransform(rotation_quaternion, translation, "grasp", self.camera_intrinsics.frame)
 
-        #ValueError: To frame of right hand side (grasp_point_test) must match from frame of left hand side (world)
-
-        # rospy.loginfo("T_camera_world {}".format(T_world_camera))
-        # rospy.loginfo("T_grasp_world {}".format(T_grasp_camera))
-
-        T_grasp_world = T_world_camera * T_grasp_camera
-        # T_grasp_world.publish_to_ros()
-
-        # # grasp_pose = Pose(translation, rotation_quaternion, frame=self.camera_intrinsics.frame)
-        # grasp_pose_stamped = geometry_msgs.msg.PoseStamped()
-
-        # header = std_msgs.msg.Header()
-        # header.frame_id = self.camera_intrinsics.frame
-        # header.stamp = rospy.Time(0)
-
-        # grasp_pose_stamped.pose = planned_grasp_pose_msg
-        # grasp_pose_stamped.header = header
-
-        # grasp_pose_world_stamped = self._get_new_pose(grasp_pose_stamped)
-
-        # # rospy.loginfo("The planned grasp with a rigid transform {}".format(T_grasp_world))
-        # rospy.loginfo("The planned grasp was converted into the world frame: {}".format(grasp_pose_world_stamped))
-
-        # g_pos = grasp_pose_world_stamped.pose.position
-        # g_quat = grasp_pose_world_stamped.pose.orientation
+        T_world_camera = self._get_transformation(self.camera_intrinsics.frame) #TODO this should be a rigidbody.getfromtransform call
         
-        # grasp_pos = np.array([g_pos.x, g_pos.y, g_pos.z])
-        # grasp_quat = np.array([g_quat.x, g_quat.y, g_quat.z, g_quat.w])
-
-        # grasp_quat_inv = tf.transformations.quaternion_inverse(grasp_quat)
-
-        # unit_vector = np.asarray([1,0,0])
-
-        # approach_direction = spacial_location.qv_mult(grasp_quat_inv, unit_vector)
-        # pre_grasp_pos = grasp_pos - approach_direction*0.1
+        rotation = np.array([[0, 0, 1],[0, 1, 0],[-1, 0, 0]])
+        translation = np.array([0, 0, 0])
+        T_grasp_gripper = RigidTransform(rotation, translation, from_frame="gripper", to_frame="grasp")
+        T_grasp_world = T_world_camera * T_grasp_camera * T_grasp_gripper
 
         import pdb; pdb.set_trace()
         t_quat = [T_grasp_world.quaternion[1], T_grasp_world.quaternion[2], T_grasp_world.quaternion[3], T_grasp_world.quaternion[0]]
         grasp_pose_world = Pose(T_grasp_world.position, t_quat, frame="/world")
-        grasp_pose_world.show_position_marker("grasp_world_transform",ident=3)
 
-        # grasp_pose_world = Pose(grasp_pos, grasp_quat, frame=self.camera_intrinsics.frame)
-        pre_grasp_pose = offset_hand(grasp_pose_world)
-
-        # rospy.loginfo("grasp_pose_world {}".format(grasp_pose_world))
-        
-        # pre_grasp_pose.show_position_marker(ident = 1, label = "pre grasp")
-        # grasp_pose_world.show_position_marker(ident = 2, label = "grasp")
+        pre_grasp_pose = offset_hand(grasp_pose_world, unit_vector=[0,0,1])
 
         return pre_grasp_pose, grasp_pose_world
 
@@ -254,7 +215,7 @@ class ARTrackPlanner(GraspPlanner):
         pre_grasp_pose = offset_hand(grasp_pose, offset_dist=0.1)
         return pre_grasp_pose, grasp_pose
 
-def offset_hand(pose_input, offset_dist=0.1):
+def offset_hand(pose_input, unit_vector=[1, 0, 0] ,offset_dist=0.1):
     """ Find the pre grasp pose by offsetting the hand backwards from its current position
     grasp_pose: the pose of the grasp location
     offset_dist: the amount to offset off the object
@@ -263,7 +224,6 @@ def offset_hand(pose_input, offset_dist=0.1):
     pre_grasp_pose: the offsetted pose of the object
     """
     #use the unit z vector because thats the direction out of the hand
-    unit_vector = np.asarray([1,0,0])
     quat = pose_input.orientation[0:4]
 
     quat_inv = tf.transformations.quaternion_inverse(quat)

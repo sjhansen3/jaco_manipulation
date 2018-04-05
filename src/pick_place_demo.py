@@ -43,7 +43,7 @@ class PickPlaceDemo:
         bounding_box: numpy array [minX, minY, maxX, maxY] in pixels around the image 
         on the depth image
         """
-        return np.array([120,120,280,280]) 
+        return np.array([300,200,400,300]) 
         #return np.array([500,500,1000,800])
 
     def move_object(self, object_name):
