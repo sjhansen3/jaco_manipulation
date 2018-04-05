@@ -18,8 +18,9 @@ from sensor_msgs.msg import Image, CameraInfo
 from perception import CameraIntrinsics, ColorImage, DepthImage
 from perception import RgbdDetectorFactory, RgbdSensorFactory
 
-from autolab_core import YamlConfig
+from autolab_core import YamlConfig, RigidTransform
 from autolab_core import Box
+# import autolab_core.rigid_transformations.RigidTransform as RigidTransform
 
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -73,7 +74,37 @@ class GQCNNPlanner(GraspPlanner):
         boundingBox.maxY = bbox[3]
         return boundingBox
 
+    def _get_new_pose(self, pose_stamped, target_frame="/world"):
+        """ Transform a pose from its frame to the desired frame
+        Params
+        ----
+        pose_stamped: A ros stamped pose with its reference frame specified
+        target_frame: The desired frame of the robot
+        Returns
+        ----
+        pose_world_stamped: The pose in the world frame
+        """
+        self.listener.waitForTransform(target_frame, self.camera_intrinsics.frame, rospy.Time(0), rospy.Duration(4.0))
+        try:
+            pose_world_stamped = self.listener.transformPose(target_frame, pose_stamped)
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            rospy.logerr("tf was not able to find a transformation between the world frame and the grasp point")
+            return False
 
+        return pose_world_stamped
+
+    def _get_transformation(self, from_frame, to_frame="world"):
+        target_frame = to_frame
+        source_frame = from_frame
+        self.listener.waitForTransform(target_frame, source_frame, rospy.Time(0), rospy.Duration(4.0))
+        try:
+            pos, quat = self.listener.lookupTransform(target_frame, source_frame, rospy.Time(0))
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            rospy.logerr("tf was not able to find a transformation from {} to {}".format(from_frame, to_frame))
+            return False
+        import pdb; pdb.set_trace()
+        return RigidTransform(quat, pos, from_frame, to_frame)
+        
     def get_grasp_plan(self, bounding_box, color_image, depth_image):
         """ finds the highest quality score grasp associated with the object
 
@@ -111,15 +142,24 @@ class GQCNNPlanner(GraspPlanner):
 
             planned_grasp_pose_msg = planned_grasp_data.grasp.pose
             grasp_succes_prob = planned_grasp_data.grasp.grasp_success_prob
+            grasp = planned_grasp_data.grasp
 
             rospy.loginfo("Grasp service request response: {}".format(planned_grasp_data))
 
         except rospy.ServiceException, e:
             rospy.logerr("Service call failed: \n %s" % e)  
 
-        # rotation_quaternion = np.asarray([grasp.pose.orientation.w, grasp.pose.orientation.x, grasp.pose.orientation.y, grasp.pose.orientation.z]) 
-        # translation = np.asarray([grasp.pose.position.x, grasp.pose.position.y, grasp.pose.position.z])
-            
+        rotation_quaternion = np.asarray([grasp.pose.orientation.w, grasp.pose.orientation.x, grasp.pose.orientation.y, grasp.pose.orientation.z]) 
+        translation = np.asarray([grasp.pose.position.x, grasp.pose.position.y, grasp.pose.position.z])
+        T_grasp_camera = RigidTransform(rotation_quaternion, translation, 'grasp', self.camera_intrinsics.frame)
+        
+        T_world_camera = self._get_transformation(self.camera_intrinsics.frame)
+
+        rospy.loginfo("T_camera_world {}".format(T_world_camera))
+        rospy.loginfo("T_grasp_world {}".format(T_grasp_camera))
+
+        T_grasp_world = T_world_camera * T_grasp_camera
+
         # grasp_pose = Pose(translation, rotation_quaternion, frame=self.camera_intrinsics.frame)
         grasp_pose_stamped = geometry_msgs.msg.PoseStamped()
 
@@ -130,27 +170,40 @@ class GQCNNPlanner(GraspPlanner):
         grasp_pose_stamped.pose = planned_grasp_pose_msg
         grasp_pose_stamped.header = header
 
-        self.listener.waitForTransform("/world", self.camera_intrinsics.frame, rospy.Time(0), rospy.Duration(4.0))
-        try:
-            grasp_pose_world_stamped = self.listener.transformPose("/world", grasp_pose_stamped)
-        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            rospy.logerr("tf was not able to find a transformation between the world frame and the grasp point")
-            rospy.sleep(0.1)
+        grasp_pose_world_stamped = self._get_new_pose(grasp_pose_stamped)
 
+        rospy.loginfo("The planned grasp with a rigid transform {}".format(T_grasp_world))
         rospy.loginfo("The planned grasp was converted into the world frame: {}".format(grasp_pose_world_stamped))
 
-        g_pos = grasp_pose_world_stamped.pose.position
-        g_quat = grasp_pose_world_stamped.pose.orientation
+        # camera_z_direction_camera = geometry_msgs.msg.PoseStamped()
+        # pose_z_camera = geometry_msgs.msg.Pose()
+        # pose_z_camera.position.x = 0
+        # pose_z_camera.position.y = 0
+        # pose_z_camera.position.z = 1
 
-        pos = np.array([g_pos.x, g_pos.y, g_pos.z])
-        rot = np.array([g_quat.x, g_quat.y, g_quat.z, g_quat.w])
-        grasp_pose_world = Pose(pos, rot, frame=self.camera_intrinsics.frame)
+        # pose_z_camera.orientation.x = 0
+        # pose_z_camera.orientation.y = 0
+        # pose_z_camera.orientation.z = 0
+        # pose_z_camera.orientation.w = 0
+
+        # camera_z_direction_camera.pose = pose_z_camera
+        # camera_z_direction_camera.header = header
+        # camera_z_direction_world_pose = self._get_new_pose(camera_z_direction_camera)
+        
+        # camera_z_pos = camera_z_direction_world_pose.pose.position
+        # camera_z_in_world = np.array([camera_z_pos.x, camera_z_pos.y, camera_z_pos.z])
+
+        # g_pos = grasp_pose_world_stamped.pose.position
+        # g_quat = grasp_pose_world_stamped.pose.orientation
+
+        # pos = np.array([g_pos.x, g_pos.y, g_pos.z])
+        # rot = np.array([g_quat.x, g_quat.y, g_quat.z, g_quat.w])
+        # grasp_pose_world = Pose(pos, rot, frame=self.camera_intrinsics.frame)
     
-        #import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
 
         rospy.loginfo("grasp_pose_world {}".format(grasp_pose_world))
-
-        pre_grasp_pose = offset_hand(grasp_pose_world, offset_dist=0.1)
+        pre_grasp_pose = offset_hand(grasp_pose_world, unit_vector=camera_z_in_world, offset_dist=-0.1)
         return pre_grasp_pose, grasp_pose_world
 
 class ARTrackPlanner(GraspPlanner):
@@ -200,7 +253,7 @@ class ARTrackPlanner(GraspPlanner):
         pre_grasp_pose = offset_hand(grasp_pose, offset_dist=0.1)
         return pre_grasp_pose, grasp_pose
 
-def offset_hand(pose_input, offset_dist=0.1):
+def offset_hand(pose_input, unit_vector=None, offset_dist=0.1):
     """ Find the pre grasp pose by offsetting the hand backwards from its current position
     grasp_pose: the pose of the grasp location
     offset_dist: the amount to offset off the object
@@ -209,8 +262,10 @@ def offset_hand(pose_input, offset_dist=0.1):
     pre_grasp_pose: the offsetted pose of the object
     """
     #use the unit z vector because thats the direction out of the hand
-    unit_z_vector = np.asarray([0,0,1])
-    direction = spacial_location.qv_mult(pose_input.orientation[0:4], unit_z_vector)
+    if unit_vector is None:
+        unit_vector = np.asarray([0,0,1])
+
+    direction = spacial_location.qv_mult(pose_input.orientation[0:4], unit_vector)
 
     print "grasp_pose.position: ", pose_input.position
 
@@ -220,7 +275,7 @@ def offset_hand(pose_input, offset_dist=0.1):
 
     pre_grasp_pose = Pose(pre_grasp_position, pose_input.orientation)
     pre_grasp_pose.show_position_marker(ident = 2, label = "pregrasp pose")
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
 
     return pre_grasp_pose
 
