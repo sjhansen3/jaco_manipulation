@@ -56,7 +56,6 @@ class GQCNNPlanner(GraspPlanner):
         # get camera intrinsics
         self.camera_intrinsics = camera_intrinsics
         self.listener = tf.TransformListener()
-        self.planned_pose_pub = rospy.Publisher('/gqcnn_grasp/pose', geometry_msgs.msg.PoseStamped, queue_size=10)
 
     def _bbox_to_msg(self, bbox):
         """

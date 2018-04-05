@@ -193,18 +193,18 @@ class Pose:
         waypoint_marker.header.stamp = rospy.get_rostime()
         waypoint_marker.ns = '/waypoint'
         waypoint_marker.id = ident
-        waypoint_marker.type = visualization_msgs.msg.Marker.SPHERE
+        waypoint_marker.type = visualization_msgs.msg.Marker.ARROW
     
         waypoint_marker.pose = self.ros_message
     
-        waypoint_marker.scale.x = scale[0]
-        waypoint_marker.scale.y = scale[1]
-        waypoint_marker.scale.z = scale[2]
+        waypoint_marker.scale.x = scale[0]*2
+        waypoint_marker.scale.y = scale[1]*.5
+        waypoint_marker.scale.z = scale[2]*.5
 
-        waypoint_marker.color.r = color[0]
-        waypoint_marker.color.g = color[1]
-        waypoint_marker.color.b = color[2]
-        waypoint_marker.color.a = 0.50
+        waypoint_marker.color.r = 1
+        waypoint_marker.color.g = 0
+        waypoint_marker.color.b = 0
+        waypoint_marker.color.a = 1
         waypoint_marker.lifetime = rospy.Duration(0)
         for i in range(3):
            self.marker_pub.publish(waypoint_marker)
@@ -222,7 +222,7 @@ class Pose:
             text_marker.color.r = color[0]
             text_marker.color.g = color[1]
             text_marker.color.b = color[2]
-            text_marker.color.a = 0.50
+            text_marker.color.a = 1
             text_marker.text = label
             text_marker.lifetime = rospy.Duration(0)
             self.marker_pub.publish(text_marker)
