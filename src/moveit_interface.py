@@ -6,6 +6,7 @@ import rospy
 import moveit_commander
 import moveit_msgs.msg
 from moveit_msgs.srv import GetPositionIK, GetPositionFK
+from moveit_commander.exception import MoveItCommanderException
 
 import geometry_msgs.msg
 import shape_msgs.msg
@@ -33,7 +34,8 @@ class RobotPlanner:
         self.group.set_goal_tolerance(0.001)
 
         self.group.allow_replanning(True)
-        self.group.set_num_planning_attempts(20)
+        #self.group.set_num_planning_attempts(20)
+        self.group.set_planning_time(10)
 
         self.add_scene_items()
         self.solved_plan = None
@@ -84,7 +86,117 @@ class RobotPlanner:
 
 
         p.pose.position.z = -0.05
-        self.scene.add_box("base",p,(0.15,0.15,0.15)) #add a base for safety
+        self.scene.add_box("base",p,(0.15,0.5,0.15)) #add a base for safety
+
+    def plan_config(self, config):
+        """ find a plan to the given robot configuration goal (joint goal)
+        params
+        ---
+        config: The config of the robot (7,) numpy array
+        returns
+        --
+        nothing
+        """
+        self.group.clear_pose_targets()
+        # self.group.forget_joint_values()
+        # self.group.get_current_joint_values
+        # self.group._g.set_joint_value_target_from_joint_state_message()
+
+        # header = std_msgs.msg.Header()
+        # robot_state = moveit_msgs.msg.RobotState()
+        # robot_state.joint_state.name = ['j2s7s300_joint_{}'.format(i) for i in range(1,8)]
+        # robot_state.joint_state.position = self.group.get_current_joint_values()
+        # rospy.loginfo("joint state message {}".format(robot_state.joint_state))
+        # self.group._g.set_joint_value_target_from_joint_state_message(robot_state.joint_state)
+        
+        try:
+            self.group.set_joint_value_target(config)
+        except (MoveItCommanderException):
+            rospy.loginfo("Moveit Exception caught")
+            
+
+        # bla = self.group.get_joints()
+        # rospy.loginfo("joints: {}".format(bla))
+        
+        # print("joints,", str(bla))
+        # rospy.loginfo("active joints {}".format(self.group.get_variable_count()))
+
+        # joint_target = {}
+        # for i in range(1,8):
+        #     joint_target["j2s7s300_joint_{}".format(i)] = 0
+        # print("joint_target",joint_target)
+
+        # self.group.set_joint_value_target(joint_target)
+
+        # rospy.loginfo("Planning to {}".format(pose))
+        self.group.set_start_state_to_current_state()
+        rospy.sleep(1)
+        self.solved_plan = self.group.plan() #automatically displays trajectory
+        if self.solved_plan is None:
+            rospy.logerr("Plan not solved")
+            return None
+
+        cur_joints = list(self.solved_plan.joint_trajectory.points[-1].positions)
+        posefk = self.fk(cur_joints).pose_stamped[0].pose
+        final_pose_res = Pose([posefk.position.x, posefk.position.y, posefk.position.z],[posefk.orientation.x, posefk.orientation.y, posefk.orientation.z, posefk.orientation.w])
+        rospy.loginfo("passed to function end!")
+        return final_pose_res 
+        #TODO add return value for success or failure
+
+    def plan_ik(self, pose_input):
+        """ find a plan to the position
+        Params
+        ---
+        pose_input: The pose to plan to. `string` or `Pose`
+        Returns
+        ---
+        1 if plan succeeded 0 otherwise
+        """
+        if isinstance(pose_input, basestring):
+            pose = Pose.load(pose_input)
+        elif isinstance(pose_input, Pose):
+            pose = pose_input
+        else:
+            raise ValueError("plan only supports pose objects")
+
+        # self.group.clear_pose_targets()
+        
+        # self.group.set_pose_target(pose.ros_message)
+
+        #debugging ik
+        p = geometry_msgs.msg.PoseStamped()
+        p.header.frame_id = "world"
+        p.pose = pose.ros_message
+        ik_config = self.ik(p)
+        rospy.loginfo("IK Config: {}".format(ik_config))
+        joints = list(ik_config.solution.joint_state.position[0:7])
+
+        # current_joints = self.group.get_current_joint_values()
+        # rospy.loginfo("current joints: {}".format(current_joints))
+        # rospy.loginfo("set joing arguments: {}".format(joints))
+
+        # header = std_msgs.msg.Header()
+        # robot_state = moveit_msgs.msg.RobotState()
+        # robot_state.joint_state.name = ['j2s7s300_joint_{}'.format(i) for i in range(1,8)]
+        # robot_state.joint_state.position = joints
+        # self.group.set_joint_value_target(robot_state.joint_state)
+        
+        rospy.loginfo("ik joints:{}".format(joints))
+        final_pose_res = self.plan_config(joints)
+
+        # rospy.loginfo("Planning to {}".format(pose))
+        # self.group.set_start_state_to_current_state()
+        # rospy.sleep(1)
+        # self.solved_plan = self.group.plan() #automatically displays trajectory
+        # if self.solved_plan is None:
+        #     rospy.logerr("Plan not solved")
+        #     return None
+
+        # cur_joints = list(self.solved_plan.joint_trajectory.points[-1].positions)
+        # posefk = self.fk(cur_joints).pose_stamped[0].pose
+        # final_pose_res = Pose([posefk.position.x, posefk.position.y, posefk.position.z],[posefk.orientation.x, posefk.orientation.y, posefk.orientation.z, posefk.orientation.w])
+        return pose, final_pose_res 
+        #TODO add return value for success or failure
 
     def plan(self, pose_input):
         """ find a plan to the position
@@ -105,27 +217,6 @@ class RobotPlanner:
         self.group.clear_pose_targets()
         
         self.group.set_pose_target(pose.ros_message)
-
-        #debugging ik
-        '''
-        p = geometry_msgs.msg.PoseStamped()
-        p.header.frame_id = "world"
-        p.pose = pose.ros_message
-        rospy.loginfo("pose.ros_message: {}".format(p))
-        ik_config = self.ik(p)
-        rospy.loginfo("IK Config: {}".format(ik_config))
-        joints = list(ik_config.solution.joint_state.position[0:7])
-
-        current_joints = self.group.get_current_joint_values()
-        rospy.loginfo("current joints: {}".format(current_joints))
-        rospy.loginfo("set joing arguments: {}".format(joints))
-
-        header = std_msgs.msg.Header()
-        robot_state = moveit_msgs.msg.RobotState()
-        robot_state.joint_state.name = ['j2s7s300_joint_{}'.format(i) for i in range(1,8)]
-        robot_state.joint_state.position = joints
-        self.group.set_joint_value_target(robot_state.joint_state)
-        '''
 
         rospy.loginfo("Planning to {}".format(pose))
         self.group.set_start_state_to_current_state()
@@ -157,9 +248,10 @@ class RobotPlanner:
         req = moveit_msgs.msg.PositionIKRequest()
         req.group_name = group_name
         req.pose_stamped = pose_stamped
-        req.timeout.secs = 0.1
-        req.avoid_collisions = False
+        req.timeout.secs = 5
+        req.avoid_collisions = False    
 
+        rospy.loginfo("Inside ik function: pose_stamp: {}".format(req))
         try:
             res = self.compute_ik(req)
             return res
@@ -293,43 +385,60 @@ def dynamic_pick_place(object_name, target_name):
     #get the ARTracker Pose
     grasp_planner = ARTrackPlanner()
     pregrasp_pose, grasp_pose = grasp_planner.get_grasp_plan(object_name)
-    #pretarget_pose, target_pose = grasp_planner.get_grasp_plan(object_name)
     pretarget_pose, target_pose = grasp_planner.get_grasp_plan(target_name)
+
+    # Add target as an obstacle
+    #robot_planner.scene.remove_world_object("ground")
+    robot_planner.scene.remove_world_object("plate")
+
+    p = geometry_msgs.msg.PoseStamped()
+    p.header.frame_id = "world"
+    # p.pose.position = target_pose.position
+    # p.pose.position.z =  -0.03
+    p.pose.position.x = target_pose.position.x
+    p.pose.position.y = target_pose.position.y
+    p.pose.position.z = target_pose.position.z - 0.05
+    p.pose.orientation.x = 0
+    p.pose.orientation.y = 0
+    p.pose.orientation.z = 0
+    p.pose.orientation.w = 1
+    print("add plate obstacle")
+    #robot_planner.scene.add_box("plate", p, (0.2, 0.2, 0.02)) #add a "plate obstacle"
 
     #home grip location
     robot_planner.plan("home_grip")
     grip_controller.grip("percent",[0,0,0])
-    #raw_input("plan to home_grip commplete, anykey and enter to execute")
+    # raw_input("plan to home_grip commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #pre grip location
     rospy.loginfo("pregrasp_pose is: {}".format(pregrasp_pose))
     rospy.loginfo("grasp_pose is: {}".format(grasp_pose))
     robot_planner.plan(pregrasp_pose)
-    raw_input("plan to grasp_pre_hardcode commplete, anykey and enter to execute")
+    # raw_input("plan to grasp_pre_hardcode commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #grip location
     robot_planner.plan(grasp_pose)
-    raw_input("plan to grasp_hardcode commplete, anykey and enter to execute")
+    # raw_input("plan to grasp_hardcode commplete, anykey and enter to execute")
     robot_planner.execute()
     
     #grip object
-    raw_input("grip object? anykey to execute")
+    # raw_input("grip object? anykey to execute")
     grip_controller.grip("percent",[75,75,75])
-    
+
     #target pre
     robot_planner.plan(pretarget_pose)
-    raw_input("plan to grasp_target_pre commplete, anykey and enter to execute")
+    # raw_input("plan to grasp_target_pre commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #target location
     robot_planner.plan(target_pose)
-    raw_input("plan to grasp_target commplete, anykey and enter to execute")
+    # raw_input("plan to grasp_target commplete, anykey and enter to execute")
     robot_planner.execute()
 
     #release object
-    #raw_input("release object? anykey to execute")
+    # raw_input("release object? anykey to execute")
     grip_controller.grip("percent",[0,0,0])
     rospy.sleep(1)
     #go bak to pre grip location
@@ -339,8 +448,14 @@ def dynamic_pick_place(object_name, target_name):
 
     #home grip location
     robot_planner.plan("home_grip")
-    raw_input("plan to home_grip commplete, anykey and enter to execute")
+    # raw_input("plan to home_grip commplete, anykey and enter to execute")
     robot_planner.execute()
+
+def test_config_plan():
+    rospy.sleep(2)
+    robot_planner = RobotPlanner()
+    grip_controller = GripController()
+    robot_planner.plan_config([0]*7)
 
 def test_plan_waypoints():
     rospy.sleep(2)
@@ -401,4 +516,5 @@ if __name__ == '__main__':
                         anonymous=True)
 
     dynamic_pick_place("cup", "target")
-    #test_plan_waypoints()
+    # test_plan_waypoints()
+    # test_config_plan()

@@ -24,7 +24,7 @@ class ARTrackPlanner(GraspPlanner):
     def __init__(self):
         GraspPlanner.__init__(self)
         #self.object_to_marker_num = {"cup": 8,"target": 2)}
-        self.object_dict = {"cup": (8,-0.02),"target": (2,0.07)} #(marker number, z offset)
+        self.object_dict = {"cup": (8,-0.03),"target": (2,0.06)} #(marker number, z offset)
 
     def get_grasp_plan(self, object_name, marker_num = None):
         """ The grasp plan for the AR tracker is simply based on a fixed offset for each object
@@ -50,7 +50,11 @@ class ARTrackPlanner(GraspPlanner):
             #break
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             rospy.logerr("Did not get for AR tracker tf frame {}".format(ar_frame))
-        hard_code_pose = Pose.load("opposite_grasp")
+
+        if object_name == "target":
+            hard_code_pose = Pose.load("grasp_hardcode")   # opposite_grasp for non-flipping
+        else:
+            hard_code_pose = Pose.load("opposite_grasp")   # opposite_grasp for non-flipping
         print "z: ", hard_code_pose.position.z
         
         
