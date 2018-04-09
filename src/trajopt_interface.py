@@ -37,7 +37,7 @@ class JacoTrajopt:
         self.env = openravepy.Environment()
 
         rospack = rospkg.RosPack()
-        package_path = rospack.get_path('interact_manipulation')
+        package_path = rospack.get_path('jaco_manipulation')
         jaco_urdf_path = package_path + '/config/jaco.urdf'
         jaco_srdf_path = package_path + '/config/jaco.srdf'
         rospy.loginfo("Loading Jaco URDF from {} and SRDF from {}...".format(jaco_urdf_path,

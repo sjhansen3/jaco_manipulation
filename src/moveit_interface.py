@@ -19,6 +19,7 @@ from spacial_location import Pose
 import numpy as np
 from grasp_planner import ARTrackPlanner
 
+from jaco import JacoInterface
 
 class RobotPlanner:
     #TODO consider renaming this - it has expanded beyond a planner
@@ -290,6 +291,56 @@ class RobotPlanner:
         pose = Pose(position,orientation)
         return pose
 
+class RobotPlannerTrajopt(RobotPlanner):
+    def __init__(self):
+        RobotPlanner.__init__(self)
+        self.jaco = JacoInterface()
+
+    def plan(self, pose_input):
+        """ find a plan to the position using trajopt
+        Params
+        ---
+        pose_input: The pose to plan to. `string` or `Pose`
+        Returns
+        ---
+        1 if plan succeeded 0 otherwise
+        """
+        if isinstance(pose_input, basestring):
+            pose = Pose.load(pose_input)
+        elif isinstance(pose_input, Pose):
+            pose = pose_input
+        else:
+            raise ValueError("plan only supports pose objects")
+
+        start_pose = self.jaco.arm_group.get_current_pose()
+        p = geometry_msgs.msg.PoseStamped()
+        p.header.frame_id = "world"
+        p.pose = pose.ros_message
+
+        self.solved_plan = self.jaco.plan(start_pose, p)
+        
+        # markers = jaco.planner.get_body_markers()
+        # for m in markers:
+        #     jaco.marker_array_pub.publish(m)
+        if self.solved_plan is None:
+            rospy.logerr("Plan not solved")
+            return None
+
+        cur_joints = list(self.solved_plan.joint_trajectory.points[-1].positions)
+        posefk = self.fk(cur_joints).pose_stamped[0].pose
+        final_pose_res = Pose([posefk.position.x, posefk.position.y, posefk.position.z],[posefk.orientation.x, posefk.orientation.y, posefk.orientation.z, posefk.orientation.w])
+        return pose, final_pose_res 
+
+    def execute(self):
+        """ Execute a planned path
+        """
+        if self.solved_plan is None:
+            rospy.logwarn("Plan is None, planning might not have been completed or failed")
+            return
+        self.jaco.execute(self.solved_plan)
+        self.solved_plan = None
+        print("execution complete")
+
 
 class GripController:
     """ A wrapper to send commands to the robot hand.
@@ -379,7 +430,7 @@ def dynamic_pick_place(object_name, target_name):
     """ A somewhat ugly function which runs pick and place using the AR trackers
     """
     rospy.sleep(2)
-    robot_planner = RobotPlanner()
+    robot_planner = RobotPlannerTrajopt() #RobotPlanner()
     grip_controller = GripController()
 
     #get the ARTracker Pose
@@ -443,7 +494,7 @@ def dynamic_pick_place(object_name, target_name):
     rospy.sleep(1)
     #go bak to pre grip location
     #robot_planner.plan("grasp_pre_hardcode")
-    #raw_input("plan to back to grasp_pre_hardcode commplete, anykey and enter to execute")
+    # raw_input("plan to back to grasp_pre_hardcode commplete, anykey and enter to execute")
     #robot_planner.execute()
 
     #home grip location
@@ -511,6 +562,33 @@ def move_to_position(position_name, robot_planner):
     print "downstream_norm: ", downstream_norm 
     return downstream_norm, rrt_norm
 
+def test_trajopt(pose_input):
+    moveit_commander.roscpp_initialize(sys.argv)
+
+    jaco = JacoInterface()
+
+    start_pose = jaco.arm_group.get_current_pose()
+
+    if isinstance(pose_input, basestring):
+        pose = Pose.load(pose_input)
+    elif isinstance(pose_input, Pose):
+        pose = pose_input
+    else:
+        raise ValueError("plan only supports pose objects")
+    p = geometry_msgs.msg.PoseStamped()
+    p.header.frame_id = "world"
+    p.pose = pose.ros_message
+
+    traj = jaco.plan(start_pose, p)
+
+    jaco.execute(traj)
+
+    markers = jaco.planner.get_body_markers()
+    for m in markers:
+        jaco.marker_array_pub.publish(m)
+
+    moveit_commander.roscpp_shutdown()
+
 if __name__ == '__main__':
     rospy.init_node('moveit_interface',
                         anonymous=True)
@@ -518,3 +596,4 @@ if __name__ == '__main__':
     dynamic_pick_place("cup", "target")
     # test_plan_waypoints()
     # test_config_plan()
+    # test_trajopt("home_grip")

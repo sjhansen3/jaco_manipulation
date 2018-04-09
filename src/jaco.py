@@ -111,6 +111,7 @@ class JacoInterface:
             rospy.loginfo("Planning trajopt path from start {},to goal {}".format(start_config, goal_config))
             # Plan a trajectory with trajopt
             traj = self.planner.plan(start_config, goal_config)
+            rospy.loginfo("traj found")
         #print(traj)
 
         return traj
@@ -199,13 +200,13 @@ def main():
     jaco = JacoInterface()
 
     # Add a coke can
-    rospack = rospkg.RosPack()
-    package_path = rospack.get_path('interact_manipulation')
-    coke_can_urdf_path = package_path + '/data/coke_can.urdf'
-    jaco.planner.load_body_from_urdf(coke_can_urdf_path, np.array([[1.0, 0.0, 0.0, 0.25],
-                                                                   [0.0, 1.0, 0.0, 0.0],
-                                                                   [0.0, 0.0, 1.0, 0.75],
-                                                                   [0.0, 0.0, 0.0, 1.0]]))
+    # rospack = rospkg.RosPack()
+    # package_path = rospack.get_path('interact_manipulation')
+    # coke_can_urdf_path = package_path + '/data/coke_can.urdf'
+    # jaco.planner.load_body_from_urdf(coke_can_urdf_path, np.array([[1.0, 0.0, 0.0, 0.25],
+    #                                                                [0.0, 1.0, 0.0, 0.0],
+    #                                                                [0.0, 0.0, 1.0, 0.75],
+    #                                                                [0.0, 0.0, 0.0, 1.0]]))
 
     # print(arm_group.get_current_pose())
 
@@ -256,7 +257,7 @@ def test():
 
     res = jaco.ik(jaco.arm_group.get_current_pose())
     start_config = [q for q in res.solution.joint_state.position[0:7]]
-    start_config[2] += 3.1415
+    # start_config[2] += 3.1415
     jaco.planner.jaco.SetDOFValues(start_config + jaco.planner.finger_joint_values)
 
     markers = jaco.planner.get_body_markers()
