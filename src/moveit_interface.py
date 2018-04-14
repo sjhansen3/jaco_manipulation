@@ -18,6 +18,7 @@ from spacial_location import Pose
 import numpy as np
 from grasp_planner import ARTrackPlanner
 
+
 class RobotPlanner:
     #TODO consider renaming this - it has expanded beyond a planner
     def __init__(self):
@@ -36,7 +37,7 @@ class RobotPlanner:
 
         self.add_scene_items()
         self.solved_plan = None
-        self.eef_name = "j2s7s300_end_effector"
+        self.eef_name = "m1n6s300_end_effector"
 
         # Set up the FK service
         rospy.wait_for_service('/compute_fk')
@@ -112,19 +113,20 @@ class RobotPlanner:
             rospy.logerr("Plan not solved")
             return None
 
+        print ("Points len ", len(self.solved_plan.joint_trajectory.points))
         cur_joints = list(self.solved_plan.joint_trajectory.points[-1].positions)
         posefk = self.fk(cur_joints).pose_stamped[0].pose
         final_pose_res = Pose([posefk.position.x, posefk.position.y, posefk.position.z],[posefk.orientation.x, posefk.orientation.y, posefk.orientation.z, posefk.orientation.w])
         return pose, final_pose_res 
         #TODO add return value for success or failure
     
-    def fk(self, joints, links=['j2s7s300_end_effector']):
+    def fk(self, joints, links=['m1n6s300_end_effector']):
         """ Computes the forward kinematics 
         joints: an array of joint positions
         """
         header = std_msgs.msg.Header()
         robot_state = moveit_msgs.msg.RobotState()
-        robot_state.joint_state.name = ['j2s7s300_joint_{}'.format(i) for i in range(1,8)]
+        robot_state.joint_state.name = ['m1n6s300_joint_{}'.format(i) for i in range(1,7)]
         robot_state.joint_state.position = joints
         return self.compute_fk(header, links, robot_state)
 
@@ -184,7 +186,7 @@ class GripController:
         self.finger_maxDist = 18.9/2/1000  # max distance for one finger
         self.finger_maxTurn = 6800  # max thread rotation for one finger
         
-        action_address = '/j2s7s300_driver/fingers_action/finger_positions'
+        action_address = '/m1n6s300_driver/fingers_action/finger_positions'
 
         self.grip_action_client = actionlib.SimpleActionClient(action_address,
                                             kinova_msgs.msg.SetFingersPositionAction)
@@ -199,6 +201,7 @@ class GripController:
         ---
         None if the grip timed out
         """
+        "Setting up grip."
         turn, meter, percent = self._convert_units(units, finger_positions)
         positions_temp1 = [max(0.0, n) for n in turn]
         positions_temp2 = [min(n, self.finger_maxTurn) for n in positions_temp1]
@@ -211,8 +214,8 @@ class GripController:
         if len(finger_positions) != 3:
             raise ValueError("wrong number of finger specified")
         
-        print("wating for action client")
-        self.grip_action_client.wait_for_server()
+        print("waiting for action client")
+        # self.grip_action_client.wait_for_server()
 
         goal = kinova_msgs.msg.SetFingersPositionGoal()
         goal.fingers.finger1 = float(finger_positions[0])
@@ -220,7 +223,7 @@ class GripController:
         goal.fingers.finger3 = float(finger_positions[2])
         print("sending grip goal {}".format(goal))
         self.grip_action_client.send_goal(goal)
-        if self.grip_action_client.wait_for_result(rospy.Duration(5.0)):
+        if self.grip_action_client.wait_for_result(rospy.Duration(10.0)):
             return self.grip_action_client.get_result()
         else:
             self.grip_action_client.cancel_all_goals()

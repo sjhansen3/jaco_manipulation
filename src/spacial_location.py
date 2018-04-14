@@ -189,7 +189,7 @@ class Pose:
         color: The color of the marker, default is random :3 tuple of floats:
         """
         waypoint_marker = visualization_msgs.msg.Marker()
-        waypoint_marker.header.frame_id = '/root'
+        waypoint_marker.header.frame_id = '/world'
         waypoint_marker.header.stamp = rospy.get_rostime()
         waypoint_marker.ns = '/waypoint'
         waypoint_marker.id = ident
@@ -212,7 +212,7 @@ class Pose:
 
         if label:
             text_marker = visualization_msgs.msg.Marker()
-            text_marker.header.frame_id = '/root'
+            text_marker.header.frame_id = '/world'
             text_marker.header.stamp = rospy.get_rostime()
             text_marker.ns = '/waypoint/text'
             text_marker.id = ident
@@ -235,7 +235,7 @@ class Pose:
         return str(self._point)+str(self._orientation)
 
     def __repr__(self):
-        return "pos: {}, orientatino: {}".format(self._point, self._orientation)
+        return "pos: {}, orientation: {}".format(self._point, self._orientation)
 
 if __name__ == "__main__":
     #test some of the functionality

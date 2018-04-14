@@ -160,10 +160,11 @@ class GQCNNPlanner(GraspPlanner):
         T_grasp_gripper = RigidTransform(rotation, translation, from_frame="gripper", to_frame="grasp")
         T_grasp_world = T_world_camera * T_grasp_camera * T_grasp_gripper
 
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         t_quat = [T_grasp_world.quaternion[1], T_grasp_world.quaternion[2], T_grasp_world.quaternion[3], T_grasp_world.quaternion[0]]
         grasp_pose_world = Pose(T_grasp_world.position, t_quat, frame="/world")
 
+        print("Get pre grasp pose")
         pre_grasp_pose = offset_hand(grasp_pose_world, unit_vector=[0,0,1])
 
         return pre_grasp_pose, grasp_pose_world

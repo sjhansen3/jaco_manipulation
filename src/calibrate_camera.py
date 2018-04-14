@@ -22,13 +22,14 @@ class Calibrator:
         self.calibration_counter = 0
 
         #default T_kinect_world
-        self.trans = (0,0,0)
-        self.orientation = (0,0,0,1)
+        # -0.7 0 1.4 0 0.45 0
+        self.trans = (-0.7,0,1.4)
+        self.orientation = (0,-0.223,0,0.975)
 
     def send_static_transform(self):
         """Broadcast the transformation between /world and the kinect
         """
-        self.br.sendTransform(self.trans, self.orientation, rospy.Time.now(), "/kinect2_rgb_optical_frame", "/world" )
+        self.br.sendTransform(self.trans, self.orientation, rospy.Time.now(), "/camera_link", "/world" )
     
     def get_static_transform(self):
         """ Finds the transformation from kinect to the ar tag
@@ -75,7 +76,7 @@ if __name__ == '__main__':
 
     #rate = rospy.Rate(1.0)
     while not rospy.is_shutdown():
-        calibrator.get_static_transform()
+        # calibrator.get_static_transform()
         calibrator.send_static_transform()
 
         #rate.sleep()

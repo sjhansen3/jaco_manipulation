@@ -1,14 +1,18 @@
 #!/usr/bin/env python
 import rospy
+import rospkg
 
 from moveit_interface import RobotPlanner, GripController
 from grasp_planner import GQCNNPlanner
 import numpy as np
 import signal
 
-from autolab_core import YamlConfig
+from path_planner import PathPlanner
 
-import perception
+from autolab_core import YamlConfig
+from spacial_location import Pose
+
+# import perception
 
 from sensor_msgs.msg import Image
 
@@ -24,12 +28,24 @@ class PickPlaceDemo:
     def _plan_and_execute(self, location, pause_message=None):
         """ plan and execute a path to a location with optional paus message
         """
-        self.path_planner.plan(location)
-        if pause_message:
-            data = raw_input(pause_message)
-            if data == 'q':
-                return False
-        return self.path_planner.execute()
+        print ("Planning and executing to: ", location)
+
+        # self.path_planner.plan(location)
+        # if pause_message:
+        #     data = raw_input(pause_message)
+        #     if data == 'q':
+        #         return False
+        # return self.path_planner.execute()
+        # location.position.z = location.position.z -1
+        # location_new = Pose([location.position.x-0.2, location.position.y, location.position.z-1], location.orientation, "root")
+        # print(location_new)
+        pose = path_planner.make_pose(location.position, location._orientation, "root")
+        print("Pose: ", pose)
+        joints = path_planner.get_ik(pose)
+        print("Joints: ", joints)
+        raw_input("Press Enter to move to position")
+        plan = path_planner.plan_to_config(joints)
+        return path_planner.execute_path(plan)
 
     def _get_bounding_box(self, object_name, color_image):
         """ Find the bounding box for the object
@@ -43,31 +59,39 @@ class PickPlaceDemo:
         bounding_box: numpy array [minX, minY, maxX, maxY] in pixels around the image 
         on the depth image
         """
-        return np.array([300,200,400,300]) 
+        return np.array([200,270,300,370]) 
         #return np.array([500,500,1000,800])
 
     def move_object(self, object_name):
         """ A somewhat ugly function which runs pick and place using the AR trackers
         """
+
+        print("Starting pack and place demo.")
         color_image, depth_image, _ = self.camera.frames()
         
         bounding_box = self._get_bounding_box(object_name, color_image)
         print("trace starting")
+        print(bounding_box)
 
         pregrasp_pose, grasp_pose = grasp_planner.get_grasp_plan(bounding_box, color_image, depth_image)
+        print("Grasp plan completed.")
+        print("Pre grasp pose: ", pregrasp_pose)
+        print("Grasp pose: ", grasp_pose)
         
         self.grip_controller.grip("percent",[0,0,0])
 
-        home_grip_msg = "plan to grasp_pre_hardcode commplete, anykey and enter to execute"
-        self._plan_and_execute("home_grip", pause_message=home_grip_msg)
+        # home_grip_msg = "plan to grasp_pre_hardcode complete, anykey and enter to execute"
+        # self._plan_and_execute("home_grip", pause_message=home_grip_msg)
 
+        pregrasp_pose_msg = "Enter to execute pregrasp"
         self._plan_and_execute(pregrasp_pose)
 
+        grasp_pose_msg = "Enter to execute grasp"
         self._plan_and_execute(grasp_pose)
 
         #grip object
         #raw_input("grip object? anykey to execute")
-        self._grip_controller.grip("percent",[75,75,75])
+        self.grip_controller.grip("percent",[75,75,75])
         
         #target pre
         self._plan_and_execute("grasp_target_pre")
@@ -77,19 +101,27 @@ class PickPlaceDemo:
 
         #release object
         #raw_input("release object? anykey to execute")
-        self._grip_controller.grip("percent",[0,0,0])
+        self.grip_controller.grip("percent",[0,0,0])
         rospy.sleep(1)
 
         self._plan_and_execute("home_grip")
 
 if __name__ == '__main__':
+    print("Starting pick_place_demo")
     rospy.init_node("pick_place_demo", log_level=rospy.DEBUG)
-    config = YamlConfig('/home/baymax/catkin_ws/src/jaco_manipulation/cfg/grasp_test.yaml')
+    rospack = rospkg.RosPack()
+    yaml_path = rospack.get_path('jaco_manipulation')
+
+    config = YamlConfig(yaml_path + '/cfg/grasp_sim.yaml')
 
     # create rgbd sensor
     rospy.loginfo('Creating RGBD Sensor')
     sensor_cfg = config['sensor_cfg']
     sensor_type = sensor_cfg['type']
+    print(sensor_type)
+
+    import perception
+
     camera = perception.RgbdSensorFactory.sensor(sensor_type, sensor_cfg)
     camera.start()
     rospy.loginfo('Sensor Running')
@@ -108,10 +140,13 @@ if __name__ == '__main__':
     frame = config['sensor_cfg']['frame']
 
     camera_intrinsics = camera.ir_intrinsics
+    # 32-bit number in meters (each pixel)
     #camera_intrinsics = perception.CameraIntrinsics(frame, fx=365.46, fy=365.46, cx=254.9, cy=205.4, skew=0.0, height=424, width=512) #TODO set height and width with param 
     grasp_planner = GQCNNPlanner(camera_intrinsics, config)
+    print("grasp planning done.")
 
-    path_planner = RobotPlanner()
+    # path_planner = RobotPlanner()
+    path_planner = PathPlanner()
     grip_controller = GripController()
     object_name = "cup"
 
